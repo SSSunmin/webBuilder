@@ -1,0 +1,56 @@
+{
+  "openGraph": {
+    "title": "데이터로 판단의 기준을 만듭니다 - Homepage | BigValue",
+    "description": "빅밸류는 복잡한 분석 과정 없이 빠르고 일관된 판단을 지원합니다. 신뢰 가능한 데이터와 표준화된 판단 구조로 기업의 의사결정을 혁신합니다.",
+    "url": "https://bigvalue.ai",
+    "site_name": "BigValue",
+    "locale": "ko_KR",
+    "image": "https://bigvalue.ai/images/og/og-light.png",
+    "type": "website"
+  },
+  "twitter": {
+    "card": "summary_large_image",
+    "title": "데이터로 판단의 기준을 만듭니다 - Homepage | BigValue",
+    "description": "빅밸류는 복잡한 분석 과정 없이 빠르고 일관된 판단을 지원합니다. 신뢰 가능한 데이터와 표준화된 판단 구조로 기업의 의사결정을 혁신합니다.",
+    "image": "https://bigvalue.ai/images/og/og-light.png"
+  },
+  "description": "빅밸류는 복잡한 분석 과정 없이 빠르고 일관된 판단을 지원합니다. 신뢰 가능한 데이터와 표준화된 판단 구조로 기업의 의사결정을 혁신합니다.",
+  "canonical": null,
+  "themeColor": null,
+  "viewport": "width=device-width, initial-scale=1",
+  "favicons": [
+    {
+      "rel": "icon",
+      "href": "https://www.bigvalue.ai/favicon.ico?favicon.fe398c4c.ico",
+      "sizes": "100x100",
+      "type": "image/x-icon"
+    }
+  ],
+  "manifest": null,
+  "structuredData": [
+    {
+      "type": "Organization",
+      "name": "BigValue",
+      "sample": "{\"@context\":\"https://schema.org\",\"@type\":\"Organization\",\"@id\":\"https://bigvalue.ai/#organization\",\"name\":\"BigValue\",\"alternateName\":\"빅밸류\",\"url\":\"https://bigvalue.ai\",\"logo\":{\"@type\":\"ImageObject\",\"url\":\"https://bigvalue.ai/images/logo/footerLogo.png\"},\"description\":\"데이터로 판단의 기준을 만듭니다\",\"sameAs\":[\"https://blog.naver.com/bigvalue\",\"https://www.linkedin.com/company/bigvalue\"]}"
+    },
+    {
+      "type": "Organization",
+      "name": "BigValue",
+      "sample": "{\"@context\":\"https://schema.org\",\"@type\":\"Organization\",\"@id\":\"https://bigvalue.ai/#organization\",\"name\":\"BigValue\",\"alternateName\":\"빅밸류\",\"url\":\"https://bigvalue.ai\",\"logo\":{\"@type\":\"ImageObject\",\"url\":\"https://bigvalue.ai/images/logo/footerLogo.png\"},\"description\":\"데이터로 판단의 기준을 만듭니다\",\"sameAs\":[\"https://blog.naver.com/bigvalue\",\"https://www.linkedin.com/company/bigvalue\"]}"
+    },
+    {
+      "type": "WebPage",
+      "name": "데이터로 판단의 기준을 만듭니다 - Homepage | BigValue",
+      "sample": "{\"@context\":\"https://schema.org\",\"@type\":\"WebPage\",\"name\":\"데이터로 판단의 기준을 만듭니다 - Homepage | BigValue\",\"description\":\"빅밸류는 복잡한 분석 과정 없이 빠르고 일관된 판단을 지원합니다. 신뢰 가능한 데이터와 표준화된 판단 구조로 기업의 의사결정을 혁신합니다.\",\"url\":\"https://bigvalue.ai/\",\"dateModified\":\"2026-02-09\",\"publisher\":{\"@type\":\"Organization\",\"name\":\"BigValue\",\"url\":\"https://bigvalue.ai\"}}"
+    }
+  ],
+  "score": {
+    "hasOg": true,
+    "hasTwitter": true,
+    "hasDescription": true,
+    "hasCanonical": false,
+    "hasStructuredData": true,
+    "hasFavicon": true,
+    "hasThemeColor": false
+  }
+}

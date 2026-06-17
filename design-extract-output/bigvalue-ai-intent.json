@@ -1,0 +1,362 @@
+{
+  "pageIntent": {
+    "type": "landing",
+    "confidence": 0.31,
+    "path": "/",
+    "title": "데이터로 판단의 기준을 만듭니다 - Homepage | BigValue",
+    "description": "빅밸류는 복잡한 분석 과정 없이 빠르고 일관된 판단을 지원합니다. 신뢰 가능한 데이터와 표준화된 판단 구조로 기업의 의사결정을 혁신합니다.",
+    "signals": [
+      {
+        "kind": "dom",
+        "type": "blog-post",
+        "weight": 0.35,
+        "detail": "byline|min-read"
+      },
+      {
+        "kind": "url",
+        "type": "landing",
+        "weight": 0.45,
+        "detail": "root-path"
+      }
+    ],
+    "alternates": [
+      {
+        "type": "blog-post",
+        "score": 0.35
+      }
+    ],
+    "needsSmart": true
+  },
+  "sectionRoles": {
+    "sections": [
+      {
+        "index": 0,
+        "tag": "nav",
+        "role": "nav",
+        "subrole": null,
+        "confidence": 0.9,
+        "heading": null,
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "buttonCount": 1,
+        "cardCount": 9,
+        "slots": {
+          "ctaCount": 1,
+          "lede": "ProductsOverviewData ProductData APIFlowAI SolutionIndustryOverview금융유통/상권공공/지자체B2B CRM정보콘텐츠AI Use caseSignalsPricingDocs실험실NEWBigValue 문의하기"
+        },
+        "needsSmart": false
+      },
+      {
+        "index": 1,
+        "tag": "nav",
+        "role": "nav",
+        "subrole": null,
+        "confidence": 0.9,
+        "heading": null,
+        "bounds": {
+          "x": 195,
+          "y": 20,
+          "w": 698.015625,
+          "h": 40
+        },
+        "buttonCount": 0,
+        "cardCount": 46,
+        "slots": {
+          "lede": "Products\nIndustry\nAI Use case\nSignals\nPricing\nDocs\n실험실\nNEW"
+        },
+        "needsSmart": false
+      },
+      {
+        "index": 2,
+        "tag": "main",
+        "role": "pricing",
+        "subrole": null,
+        "confidence": 0.4,
+        "heading": "BigValue는 데이터로 '판단의 기준'을 만드는 회사입니다",
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "w": 1280,
+          "h": 4500.703125
+        },
+        "buttonCount": 2,
+        "cardCount": 32,
+        "slots": {
+          "heading": "BigValue는 데이터로 '판단의 기준'을 만드는 회사입니다",
+          "subheadings": [
+            "부동산 중개 에이전트\n복덕방 가재 오픈"
+          ],
+          "ctaCount": 2
+        },
+        "needsSmart": true
+      },
+      {
+        "index": 3,
+        "tag": "section",
+        "role": "content",
+        "subrole": null,
+        "confidence": 0.3,
+        "heading": "부동산 중개 에이전트\n복덕방 가재 오픈",
+        "bounds": {
+          "x": 0,
+          "y": 398,
+          "w": 1280,
+          "h": 379
+        },
+        "buttonCount": 0,
+        "cardCount": 19,
+        "slots": {
+          "heading": "부동산 중개 에이전트\n복덕방 가재 오픈",
+          "lede": "BIGVALUE LAB"
+        },
+        "needsSmart": true
+      },
+      {
+        "index": 4,
+        "tag": "section",
+        "role": "pricing",
+        "subrole": null,
+        "confidence": 0.4,
+        "heading": null,
+        "bounds": {
+          "x": 0,
+          "y": 957,
+          "w": 1280,
+          "h": 766
+        },
+        "buttonCount": 0,
+        "cardCount": 4,
+        "slots": {
+          "lede": "이제 의사결정에만 집중하세요"
+        },
+        "needsSmart": true
+      },
+      {
+        "index": 5,
+        "tag": "section",
+        "role": "content",
+        "subrole": null,
+        "confidence": 0.3,
+        "heading": null,
+        "bounds": {
+          "x": 0,
+          "y": 2101,
+          "w": 1280,
+          "h": 642.703125
+        },
+        "buttonCount": 0,
+        "cardCount": 5,
+        "slots": {
+          "lede": "나만의 Flow 만들기"
+        },
+        "needsSmart": true
+      },
+      {
+        "index": 6,
+        "tag": "section",
+        "role": "content",
+        "subrole": null,
+        "confidence": 0.3,
+        "heading": null,
+        "bounds": {
+          "x": 0,
+          "y": 2970.703125,
+          "w": 1280,
+          "h": 870
+        },
+        "buttonCount": 0,
+        "cardCount": 1,
+        "slots": {
+          "lede": "내 문제에 맞춘 정확한 해답"
+        },
+        "needsSmart": true
+      },
+      {
+        "index": 7,
+        "tag": "section",
+        "role": "content",
+        "subrole": null,
+        "confidence": 0.3,
+        "heading": null,
+        "bounds": {
+          "x": 24,
+          "y": 3124.703125,
+          "w": 400,
+          "h": 692
+        },
+        "buttonCount": 0,
+        "cardCount": 1,
+        "slots": {
+          "lede": "데이터 호출"
+        },
+        "needsSmart": true
+      },
+      {
+        "index": 8,
+        "tag": "section",
+        "role": "content",
+        "subrole": null,
+        "confidence": 0.3,
+        "heading": null,
+        "bounds": {
+          "x": 452,
+          "y": 3124.703125,
+          "w": 804,
+          "h": 692
+        },
+        "buttonCount": 0,
+        "cardCount": 0,
+        "slots": {},
+        "needsSmart": true
+      },
+      {
+        "index": 9,
+        "tag": "section",
+        "role": "content",
+        "subrole": null,
+        "confidence": 0.3,
+        "heading": null,
+        "bounds": {
+          "x": 0,
+          "y": 4063.703125,
+          "w": 1280,
+          "h": 377
+        },
+        "buttonCount": 2,
+        "cardCount": 2,
+        "slots": {
+          "ctaCount": 2,
+          "lede": "가입 없이 10초 안에 데이터를 확인하세요!"
+        },
+        "needsSmart": true
+      },
+      {
+        "index": 10,
+        "tag": "footer",
+        "role": "footer",
+        "subrole": null,
+        "confidence": 0.95,
+        "heading": null,
+        "bounds": {
+          "x": 40,
+          "y": 4500.703125,
+          "w": 1200,
+          "h": 426
+        },
+        "buttonCount": 0,
+        "cardCount": 6,
+        "slots": {
+          "lede": "주식회사 빅밸류\n서울특별시 성동구 연무장7길 11, 9층"
+        },
+        "needsSmart": false
+      },
+      {
+        "index": 11,
+        "tag": "section",
+        "role": "content",
+        "subrole": null,
+        "confidence": 0.3,
+        "heading": null,
+        "bounds": {
+          "x": 240,
+          "y": 4580.703125,
+          "w": 800,
+          "h": 184
+        },
+        "buttonCount": 0,
+        "cardCount": 5,
+        "slots": {
+          "lede": "주식회사 빅밸류\n서울특별시 성동구 연무장7길 11, 9층"
+        },
+        "needsSmart": true
+      },
+      {
+        "index": 12,
+        "tag": "section",
+        "role": "content",
+        "subrole": null,
+        "confidence": 0.3,
+        "heading": null,
+        "bounds": {
+          "x": 240,
+          "y": 4580.703125,
+          "w": 231.9375,
+          "h": 184
+        },
+        "buttonCount": 0,
+        "cardCount": 0,
+        "slots": {
+          "lede": "주식회사 빅밸류\n서울특별시 성동구 연무장7길 11, 9층"
+        },
+        "needsSmart": true
+      },
+      {
+        "index": 13,
+        "tag": "section",
+        "role": "content",
+        "subrole": null,
+        "confidence": 0.3,
+        "heading": null,
+        "bounds": {
+          "x": 924.109375,
+          "y": 4580.703125,
+          "w": 115.890625,
+          "h": 184
+        },
+        "buttonCount": 0,
+        "cardCount": 5,
+        "slots": {
+          "lede": "회사 소개"
+        },
+        "needsSmart": true
+      },
+      {
+        "index": 14,
+        "tag": "section",
+        "role": "content",
+        "subrole": null,
+        "confidence": 0.3,
+        "heading": null,
+        "bounds": {
+          "x": 240,
+          "y": 4829.703125,
+          "w": 800,
+          "h": 41
+        },
+        "buttonCount": 0,
+        "cardCount": 1,
+        "slots": {
+          "lede": "Copyright 2026 by BigValue Co., Ltd. All rights reserved."
+        },
+        "needsSmart": true
+      }
+    ],
+    "counts": {
+      "nav": 2,
+      "pricing": 2,
+      "content": 10,
+      "footer": 1
+    },
+    "readingOrder": [
+      "nav",
+      "pricing",
+      "nav",
+      "content",
+      "pricing",
+      "content",
+      "content",
+      "content",
+      "content",
+      "content",
+      "footer",
+      "content",
+      "content",
+      "content",
+      "content"
+    ]
+  }
+}

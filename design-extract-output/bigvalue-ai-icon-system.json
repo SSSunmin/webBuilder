@@ -1,0 +1,162 @@
+{
+  "library": "heroicons-outline",
+  "confidence": 0.8,
+  "alternates": [
+    {
+      "id": "phosphor",
+      "score": 0.7
+    },
+    {
+      "id": "feather",
+      "score": 0.7
+    },
+    {
+      "id": "tabler",
+      "score": 0.6
+    }
+  ],
+  "stats": {
+    "count": 21,
+    "strokeOnly": 16,
+    "fillOnly": 0,
+    "mixed": 0,
+    "avgStrokeWidth": 2,
+    "gridDistribution": {
+      "24": 16
+    },
+    "roundedCapsFraction": 0.76
+  },
+  "signals": [
+    "strokeDominant",
+    "roundedCaps",
+    "grid24"
+  ],
+  "icons": [
+    {
+      "class": "",
+      "grid": null,
+      "strokeWidth": null,
+      "style": "mixed"
+    },
+    {
+      "class": "lucide lucide-chevron-down w-[1.4rem] h-[1.4rem] transition-transform duration-3",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    },
+    {
+      "class": "lucide lucide-arrow-right w-[1.2rem] h-[1.2rem]",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    },
+    {
+      "class": "lucide lucide-database w-[1.6rem] h-[1.6rem] text-Primary-Main group-hover/item:",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    },
+    {
+      "class": "lucide lucide-code-xml w-[1.6rem] h-[1.6rem] text-Primary-Main group-hover/item:",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    },
+    {
+      "class": "lucide lucide-workflow w-[1.6rem] h-[1.6rem] text-Primary-Main group-hover/item:",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    },
+    {
+      "class": "lucide lucide-brain w-[1.6rem] h-[1.6rem] text-Primary-Main group-hover/item:tex",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    },
+    {
+      "class": "lucide lucide-chevron-down w-[1.4rem] h-[1.4rem] transition-transform duration-3",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    },
+    {
+      "class": "lucide lucide-arrow-right w-[1.2rem] h-[1.2rem]",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    },
+    {
+      "class": "lucide lucide-building2 lucide-building-2 w-[1.6rem] h-[1.6rem] text-Primary-Mai",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    },
+    {
+      "class": "lucide lucide-store w-[1.6rem] h-[1.6rem] text-Primary-Main group-hover/item:tex",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    },
+    {
+      "class": "lucide lucide-landmark w-[1.6rem] h-[1.6rem] text-Primary-Main group-hover/item:",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    },
+    {
+      "class": "lucide lucide-users w-[1.6rem] h-[1.6rem] text-Primary-Main group-hover/item:tex",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    },
+    {
+      "class": "lucide lucide-file-text w-[1.6rem] h-[1.6rem] text-Primary-Main group-hover/item",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    },
+    {
+      "class": "lucide lucide-arrow-right h-[1.4rem] w-[1.4rem] transition-transform group-hover",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    },
+    {
+      "class": "lucide lucide-arrow-right w-[1.6rem] h-[1.6rem]",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    },
+    {
+      "class": "",
+      "grid": null,
+      "strokeWidth": null,
+      "style": "mixed"
+    },
+    {
+      "class": "",
+      "grid": null,
+      "strokeWidth": null,
+      "style": "mixed"
+    },
+    {
+      "class": "",
+      "grid": null,
+      "strokeWidth": null,
+      "style": "mixed"
+    },
+    {
+      "class": "",
+      "grid": null,
+      "strokeWidth": null,
+      "style": "mixed"
+    },
+    {
+      "class": "lucide lucide-arrow-up-right",
+      "grid": 24,
+      "strokeWidth": 2,
+      "style": "stroke"
+    }
+  ]
+}

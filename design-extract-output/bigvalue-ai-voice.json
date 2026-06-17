@@ -1,0 +1,26 @@
+{
+  "tone": "friendly",
+  "pronoun": "third-person",
+  "headingStyle": "all-lowercase",
+  "headingLengthClass": "tight",
+  "ctaVerbs": [],
+  "buttonPatterns": [
+    {
+      "value": "문의하기",
+      "count": 2
+    },
+    {
+      "value": "무료로 체험하기",
+      "count": 1
+    }
+  ],
+  "sampleHeadings": [
+    "BigValue는 데이터로 '판단의 기준'을 만드는 회사입니다",
+    "부동산 중개 에이전트\n복덕방 가재 오픈",
+    "부동산 중개 에이전트\n복덕방 가재 오픈"
+  ],
+  "stats": {
+    "buttons": 3,
+    "headings": 3
+  }
+}
