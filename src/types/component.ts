@@ -2,12 +2,7 @@ import type { ReactNode } from "react";
 import type { PageNode } from "./page";
 
 /** Editor control used by the inspector to render a field for a prop. */
-export type PropControl =
-  | "text"
-  | "number"
-  | "select"
-  | "boolean"
-  | "color";
+export type PropControl = "text" | "number" | "select" | "boolean" | "color";
 
 /** Schema for a single editable prop of a component. */
 export interface PropSchema {
@@ -29,8 +24,12 @@ export interface ComponentDef {
   category: string;
   /** Whether this component accepts child nodes. */
   isContainer: boolean;
+  /** Initial width/height (px) when the component is added. */
+  defaultSize: { w: number; h: number };
+  /** Initial background color, if any. */
+  defaultBackground?: string;
   props: PropSchema[];
-  /** Canvas preview renderer. `children` are the already-rendered child nodes. */
+  /** Canvas preview renderer. Fills its frame box; `children` are child nodes. */
   render: (props: Record<string, unknown>, children?: ReactNode) => ReactNode;
   /** Emits a JSX string for code export. `childrenCode` is the joined child JSX. */
   toCode: (node: PageNode, childrenCode: string) => string;

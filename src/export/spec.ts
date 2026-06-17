@@ -18,26 +18,39 @@ function summarizeProps(node: PageNode): string {
   return parts.join(", ");
 }
 
-function renderNode(doc: PageDocument, nodeId: string, depth: number): string[] {
+function frameSummary(node: PageNode, isRoot: boolean): string {
+  const f = node.frame;
+  const size = `${f.w}×${f.h}`;
+  const pos = isRoot ? size : `@(${f.x},${f.y}) ${size}`;
+  return node.background ? `${pos}, bg ${node.background}` : pos;
+}
+
+function renderNode(
+  doc: PageDocument,
+  nodeId: string,
+  depth: number,
+  isRoot: boolean,
+): string[] {
   const node = doc.nodes[nodeId];
   if (!node) return [];
   const def = getComponentDef(node.type);
   const indent = "  ".repeat(depth);
   const kind = def?.isContainer ? " (container)" : "";
   const summary = summarizeProps(node);
-  const line = `${indent}- **${def?.label ?? node.type}**${kind}${
-    summary ? ` — ${summary}` : ""
-  }`;
+  const line = `${indent}- **${def?.label ?? node.type}**${kind} — ${frameSummary(
+    node,
+    isRoot,
+  )}${summary ? ` — ${summary}` : ""}`;
   const lines = [line];
   for (const childId of node.children) {
-    lines.push(...renderNode(doc, childId, depth + 1));
+    lines.push(...renderNode(doc, childId, depth + 1, false));
   }
   return lines;
 }
 
-/** Human/AI-readable markdown spec of the page (component tree + props). */
+/** Human/AI-readable markdown spec of the page (tree + position/size + props). */
 export function generateSpec(doc: PageDocument): string {
   const header = `# Page: ${doc.meta.name}`;
-  const tree = renderNode(doc, doc.rootId, 0).join("\n");
+  const tree = renderNode(doc, doc.rootId, 0, true).join("\n");
   return `${header}\n\n${tree}\n`;
 }

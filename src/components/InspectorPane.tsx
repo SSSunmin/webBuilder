@@ -2,11 +2,12 @@ import type { ReactNode } from "react";
 import { getComponentDef } from "../registry";
 import { useEditorStore } from "../store/editorStore";
 import type { PropSchema } from "../types/component";
+import type { NodeFrame } from "../types/page";
 
 const inputCls =
   "h-9 w-full rounded-button border border-line px-2 text-sm focus:border-brand focus:outline-none";
 
-function Field({
+function PropField({
   schema,
   value,
   onChange,
@@ -54,24 +55,6 @@ function Field({
         </label>
       );
       break;
-    case "color":
-      control = (
-        <div className="flex items-center gap-2">
-          <input
-            type="color"
-            className="h-9 w-10 rounded-button border border-line"
-            value={typeof value === "string" && value ? value : "#000000"}
-            onChange={(e) => onChange(e.target.value)}
-          />
-          <input
-            type="text"
-            className={inputCls}
-            value={typeof value === "string" ? value : ""}
-            onChange={(e) => onChange(e.target.value)}
-          />
-        </div>
-      );
-      break;
     default:
       control = (
         <input
@@ -82,11 +65,32 @@ function Field({
         />
       );
   }
-
   return (
     <label className="flex flex-col gap-1">
       <span className="text-xs font-medium text-muted">{schema.label}</span>
       {control}
+    </label>
+  );
+}
+
+function FrameField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted">{label}</span>
+      <input
+        type="number"
+        className={inputCls}
+        value={Math.round(value)}
+        onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value))}
+      />
     </label>
   );
 }
@@ -96,9 +100,15 @@ export function InspectorPane() {
   const node = useEditorStore((s) =>
     s.selectedId ? s.document?.nodes[s.selectedId] : undefined,
   );
+  const isRoot = useEditorStore((s) => s.selectedId === s.document?.rootId);
   const updateNodeProps = useEditorStore((s) => s.updateNodeProps);
+  const updateNodeFrame = useEditorStore((s) => s.updateNodeFrame);
+  const setNodeBackground = useEditorStore((s) => s.setNodeBackground);
 
   const def = node ? getComponentDef(node.type) : undefined;
+
+  const setFrame = (key: keyof NodeFrame, v: number) =>
+    selectedId && updateNodeFrame(selectedId, { [key]: v }, `frame:${selectedId}:${key}`);
 
   return (
     <section className="flex min-h-0 flex-col overflow-hidden rounded-card border border-line bg-white shadow-card">
@@ -106,20 +116,67 @@ export function InspectorPane() {
         속성{def ? ` · ${def.label}` : ""}
       </h2>
       <div className="flex-1 overflow-auto p-4">
-        {!node || !def ? (
+        {!node || !def || !selectedId ? (
           <p className="text-sm text-muted">
             캔버스나 레이어에서 컴포넌트를 선택하세요.
           </p>
         ) : (
-          <div className="flex flex-col gap-3">
-            {def.props.map((schema) => (
-              <Field
-                key={schema.key}
-                schema={schema}
-                value={node.props[schema.key]}
-                onChange={(v) => updateNodeProps(selectedId!, { [schema.key]: v })}
-              />
-            ))}
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                위치 · 크기
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {!isRoot && (
+                  <>
+                    <FrameField label="X" value={node.frame.x} onChange={(v) => setFrame("x", v)} />
+                    <FrameField label="Y" value={node.frame.y} onChange={(v) => setFrame("y", v)} />
+                  </>
+                )}
+                <FrameField label="너비(W)" value={node.frame.w} onChange={(v) => setFrame("w", v)} />
+                <FrameField label="높이(H)" value={node.frame.h} onChange={(v) => setFrame("h", v)} />
+              </div>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted">배경색</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    className="h-9 w-10 rounded-button border border-line"
+                    value={node.background || "#ffffff"}
+                    onChange={(e) => setNodeBackground(selectedId, e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    placeholder="비우면 투명"
+                    className={inputCls}
+                    value={node.background ?? ""}
+                    onChange={(e) => setNodeBackground(selectedId, e.target.value)}
+                  />
+                  <button
+                    onClick={() => setNodeBackground(selectedId, "")}
+                    className="h-9 shrink-0 rounded-button border border-line px-2 text-xs text-muted hover:bg-line2"
+                  >
+                    투명
+                  </button>
+                </div>
+              </label>
+            </div>
+
+            {def.props.length > 0 && (
+              <div className="flex flex-col gap-3 border-t border-line2 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  {def.label} 옵션
+                </p>
+                {def.props.map((schema) => (
+                  <PropField
+                    key={schema.key}
+                    schema={schema}
+                    value={node.props[schema.key]}
+                    onChange={(v) => updateNodeProps(selectedId, { [schema.key]: v })}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

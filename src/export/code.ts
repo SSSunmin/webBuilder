@@ -1,26 +1,5 @@
 import { getComponentDef } from "../registry";
-import type { PageDocument } from "../types/page";
-
-/** Render a node (and its subtree) to a JSX string via the registry toCode(). */
-function renderNode(doc: PageDocument, nodeId: string): string {
-  const node = doc.nodes[nodeId];
-  if (!node) return "";
-  const def = getComponentDef(node.type);
-  if (!def) return "";
-
-  const childCodes = node.children
-    .map((childId) => renderNode(doc, childId))
-    .filter(Boolean);
-  const childrenBlock = childCodes.join("\n");
-  const indented = childrenBlock
-    ? childrenBlock
-        .split("\n")
-        .map((l) => "  " + l)
-        .join("\n")
-    : "";
-
-  return def.toCode(node, indented);
-}
+import type { PageDocument, PageNode } from "../types/page";
 
 function indentBlock(code: string, spaces: number): string {
   const pad = " ".repeat(spaces);
@@ -30,11 +9,41 @@ function indentBlock(code: string, spaces: number): string {
     .join("\n");
 }
 
+/** Inline style literal for a node's frame + background. */
+function frameStyle(node: PageNode, isRoot: boolean): string {
+  const f = node.frame;
+  const parts = isRoot
+    ? [`position: "relative"`, `width: ${f.w}`, `height: ${f.h}`, `margin: "0 auto"`]
+    : [
+        `position: "absolute"`,
+        `left: ${f.x}`,
+        `top: ${f.y}`,
+        `width: ${f.w}`,
+        `height: ${f.h}`,
+      ];
+  if (node.background) parts.push(`background: "${node.background}"`);
+  return `{{ ${parts.join(", ")} }}`;
+}
+
+/** Render a node (and subtree) to JSX, wrapping each in a positioned div. */
+function renderNode(doc: PageDocument, nodeId: string, isRoot: boolean): string {
+  const node = doc.nodes[nodeId];
+  if (!node) return "";
+  const def = getComponentDef(node.type);
+  if (!def) return "";
+
+  const childCodes = def.isContainer
+    ? node.children.map((cid) => renderNode(doc, cid, false)).filter(Boolean)
+    : [];
+  const childrenBlock = childCodes.join("\n");
+  const inner = def.toCode(node, indentBlock(childrenBlock, 2));
+
+  return `<div style=${frameStyle(node, isRoot)}>\n${indentBlock(inner, 2)}\n</div>`;
+}
+
 /** Generate a React + TS component string for the page. */
 export function generateCode(doc: PageDocument): string {
-  const body = renderNode(doc, doc.rootId)
-    // collapse blank lines left by empty containers
-    .replace(/\n[ \t]*\n/g, "\n");
+  const body = renderNode(doc, doc.rootId, true).replace(/\n[ \t]*\n/g, "\n");
   return [
     "export function Page() {",
     "  return (",

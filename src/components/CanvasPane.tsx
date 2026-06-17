@@ -10,21 +10,36 @@ export function CanvasPane() {
   );
   const selectNode = useEditorStore((s) => s.selectNode);
   const removeNode = useEditorStore((s) => s.removeNode);
+  const moveNodeBy = useEditorStore((s) => s.moveNodeBy);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Delete" && e.key !== "Backspace") return;
       if (!selectedId) return;
       const t = e.target as HTMLElement;
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable) {
         return;
       }
-      e.preventDefault();
-      removeNode(selectedId);
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        removeNode(selectedId);
+        return;
+      }
+      const step = e.shiftKey ? 10 : 1;
+      const moves: Record<string, [number, number]> = {
+        ArrowLeft: [-step, 0],
+        ArrowRight: [step, 0],
+        ArrowUp: [0, -step],
+        ArrowDown: [0, step],
+      };
+      const d = moves[e.key];
+      if (d && selectedId !== rootId) {
+        e.preventDefault();
+        moveNodeBy(selectedId, d[0], d[1], `nudge:${selectedId}`);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedId, removeNode]);
+  }, [selectedId, rootId, removeNode, moveNodeBy]);
 
   const deletable = selectedId && selectedId !== rootId;
 
@@ -47,7 +62,7 @@ export function CanvasPane() {
         )}
       </div>
       <div
-        className="flex-1 overflow-auto bg-line2/40 p-4"
+        className="flex-1 overflow-auto bg-line2/50 p-6"
         onClick={() => selectNode(null)}
       >
         {rootId ? (

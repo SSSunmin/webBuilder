@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import { createNode, getComponentDef } from "../registry";
-import type { PageDocument, PageNode } from "../types/page";
+import { createNode, defaultFrameFor, getComponentDef } from "../registry";
+import type { NodeFrame, PageDocument, PageNode } from "../types/page";
 
 const HISTORY_LIMIT = 50;
 
@@ -8,9 +8,10 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-/** Create an empty document whose root is a Layout container. */
+/** Create an empty document whose root is a Layout frame. */
 export function createDocument(name: string): PageDocument {
   const root = createNode("Layout");
+  root.frame = { ...root.frame, x: 0, y: 0 };
   const stamp = nowIso();
   return {
     id: crypto.randomUUID(),
@@ -21,21 +22,46 @@ export function createDocument(name: string): PageDocument {
   };
 }
 
+/** Backfill frame/background on documents saved before free-positioning. */
+function normalizeDocument(doc: PageDocument): PageDocument {
+  let changed = false;
+  const nodes: Record<string, PageNode> = {};
+  for (const [id, node] of Object.entries(doc.nodes)) {
+    if (node.frame) {
+      nodes[id] = node;
+      continue;
+    }
+    changed = true;
+    nodes[id] = {
+      ...node,
+      frame: defaultFrameFor(node.type),
+      background: node.background ?? getComponentDef(node.type)?.defaultBackground,
+    };
+  }
+  return changed ? { ...doc, nodes } : doc;
+}
+
 interface EditorState {
   document: PageDocument | null;
   selectedId: string | null;
   past: PageDocument[];
   future: PageDocument[];
-  /** Tag of the last commit, used to coalesce rapid edits (e.g. prop typing). */
   lastTag: string | null;
 
   loadDocument: (doc: PageDocument) => void;
   newDocument: (name: string) => PageDocument;
   selectNode: (id: string | null) => void;
-  addNode: (parentId: string, type: string, index?: number) => string | null;
+  addNode: (
+    parentId: string,
+    type: string,
+    position?: { x: number; y: number },
+  ) => string | null;
   updateNodeProps: (id: string, partial: Record<string, unknown>) => void;
+  updateNodeFrame: (id: string, partial: Partial<NodeFrame>, tag?: string) => void;
+  moveNodeBy: (id: string, dx: number, dy: number, tag?: string) => void;
+  setNodeBackground: (id: string, background: string) => void;
   removeNode: (id: string) => void;
-  moveNode: (id: string, newParentId: string, index?: number) => void;
+  moveNode: (id: string, newParentId: string, position?: { x: number; y: number }) => void;
   undo: () => void;
   redo: () => void;
 }
@@ -69,8 +95,6 @@ function isContainer(nodes: Record<string, PageNode>, id: string): boolean {
 }
 
 export const useEditorStore = create<EditorState>((set, get) => {
-  /** Apply a change, recording history. Same non-null tag as the previous
-   * commit coalesces (no new undo step) — keeps prop typing to one step. */
   const apply = (
     producer: (doc: PageDocument) => PageDocument,
     tag: string | null,
@@ -88,6 +112,19 @@ export const useEditorStore = create<EditorState>((set, get) => {
     });
   };
 
+  const patchNode = (
+    id: string,
+    patch: (node: PageNode) => PageNode,
+    tag: string | null,
+  ) => {
+    const doc = get().document;
+    if (!doc || !doc.nodes[id]) return;
+    apply(
+      (d) => ({ ...d, nodes: { ...d.nodes, [id]: patch(d.nodes[id]) } }),
+      tag,
+    );
+  };
+
   return {
     document: null,
     selectedId: null,
@@ -96,7 +133,13 @@ export const useEditorStore = create<EditorState>((set, get) => {
     lastTag: null,
 
     loadDocument: (doc) =>
-      set({ document: doc, selectedId: null, past: [], future: [], lastTag: null }),
+      set({
+        document: normalizeDocument(doc),
+        selectedId: null,
+        past: [],
+        future: [],
+        lastTag: null,
+      }),
 
     newDocument: (name) => {
       const doc = createDocument(name);
@@ -106,38 +149,55 @@ export const useEditorStore = create<EditorState>((set, get) => {
 
     selectNode: (id) => set({ selectedId: id }),
 
-    addNode: (parentId, type, index) => {
+    addNode: (parentId, type, position) => {
       const doc = get().document;
-      if (!doc) return null;
-      if (!isContainer(doc.nodes, parentId)) return null;
-      const node = createNode(type);
+      if (!doc || !isContainer(doc.nodes, parentId)) return null;
+      const node = createNode(type, position);
       apply((d) => {
         const parent = d.nodes[parentId];
-        const children = [...parent.children];
-        children.splice(index ?? children.length, 0, node.id);
         return {
           ...d,
-          nodes: { ...d.nodes, [node.id]: node, [parentId]: { ...parent, children } },
+          nodes: {
+            ...d.nodes,
+            [node.id]: node,
+            [parentId]: { ...parent, children: [...parent.children, node.id] },
+          },
         };
       }, null);
       set({ selectedId: node.id });
       return node.id;
     },
 
-    updateNodeProps: (id, partial) => {
-      const doc = get().document;
-      if (!doc || !doc.nodes[id]) return;
-      apply(
-        (d) => {
-          const node = d.nodes[id];
-          return {
-            ...d,
-            nodes: { ...d.nodes, [id]: { ...node, props: { ...node.props, ...partial } } },
-          };
-        },
+    updateNodeProps: (id, partial) =>
+      patchNode(
+        id,
+        (node) => ({ ...node, props: { ...node.props, ...partial } }),
         `props:${id}:${Object.keys(partial).join(",")}`,
-      );
-    },
+      ),
+
+    updateNodeFrame: (id, partial, tag) =>
+      patchNode(
+        id,
+        (node) => ({ ...node, frame: { ...node.frame, ...partial } }),
+        tag ?? `frame:${id}:${Object.keys(partial).join(",")}`,
+      ),
+
+    moveNodeBy: (id, dx, dy, tag) =>
+      patchNode(
+        id,
+        (node) => ({
+          ...node,
+          frame: {
+            ...node.frame,
+            x: Math.max(0, Math.round(node.frame.x + dx)),
+            y: Math.max(0, Math.round(node.frame.y + dy)),
+          },
+        }),
+        tag ?? null,
+      ),
+
+    setNodeBackground: (id, background) =>
+      patchNode(id, (node) => ({ ...node, background }), `bg:${id}`),
 
     removeNode: (id) => {
       const doc = get().document;
@@ -158,13 +218,13 @@ export const useEditorStore = create<EditorState>((set, get) => {
       if (removedSet.has(get().selectedId ?? "")) set({ selectedId: null });
     },
 
-    moveNode: (id, newParentId, index) => {
+    moveNode: (id, newParentId, position) => {
       const doc = get().document;
       if (!doc || id === doc.rootId || id === newParentId) return;
       if (!isContainer(doc.nodes, newParentId)) return;
       if (collectSubtree(doc.nodes, id).includes(newParentId)) return;
       const oldParentId = findParentId(doc.nodes, id);
-      if (!oldParentId) return;
+      if (!oldParentId || oldParentId === newParentId) return;
       apply((d) => {
         const nodes = { ...d.nodes };
         const oldParent = nodes[oldParentId];
@@ -173,9 +233,20 @@ export const useEditorStore = create<EditorState>((set, get) => {
           children: oldParent.children.filter((c) => c !== id),
         };
         const newParent = nodes[newParentId];
-        const children = [...newParent.children];
-        children.splice(index ?? children.length, 0, id);
-        nodes[newParentId] = { ...newParent, children };
+        nodes[newParentId] = {
+          ...newParent,
+          children: [...newParent.children, id],
+        };
+        if (position) {
+          nodes[id] = {
+            ...nodes[id],
+            frame: {
+              ...nodes[id].frame,
+              x: Math.max(0, Math.round(position.x)),
+              y: Math.max(0, Math.round(position.y)),
+            },
+          };
+        }
         return { ...d, nodes };
       }, null);
     },
