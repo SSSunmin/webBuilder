@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { storage } from "../storage";
 import { useEditorStore } from "../store/editorStore";
+import { ExportModal } from "./ExportModal";
 
 type BuilderHeaderProps = {
   projectId: string;
@@ -12,6 +13,7 @@ type SaveState = "idle" | "saving" | "saved";
 export function BuilderHeader({ projectId }: BuilderHeaderProps) {
   const document = useEditorStore((s) => s.document);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [exportOpen, setExportOpen] = useState(false);
 
   const projectName = document?.meta.name ?? projectId;
 
@@ -45,11 +47,14 @@ export function BuilderHeader({ projectId }: BuilderHeaderProps) {
           {saveState === "saving" ? "저장 중…" : saveState === "saved" ? "저장됨 ✓" : "저장"}
         </button>
         <button
-          className="h-9 rounded-button bg-brand px-3 text-sm font-semibold text-white shadow-card hover:bg-brand-dark"
+          onClick={() => setExportOpen(true)}
+          disabled={!document}
+          className="h-9 rounded-button bg-brand px-3 text-sm font-semibold text-white shadow-card hover:bg-brand-dark disabled:opacity-50"
         >
           Export
         </button>
       </div>
+      <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} />
     </header>
   );
 }
