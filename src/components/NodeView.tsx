@@ -83,6 +83,7 @@ export function NodeView({ nodeId }: { nodeId: string }) {
   return (
     <div
       ref={setRefs}
+      data-node-id={nodeId}
       {...attributes}
       {...listeners}
       style={base}

@@ -7,9 +7,12 @@ import {
 } from "@dnd-kit/core";
 import type { Active, DragEndEvent, DragStartEvent, Over } from "@dnd-kit/core";
 import { useEffect, useState } from "react";
+import { createSnapModifier, snapBox } from "../canvas/snap";
 import { getComponentDef } from "../registry";
 import { useEditorStore } from "../store/editorStore";
 import type { PageNode } from "../types/page";
+
+const snapModifier = createSnapModifier();
 import { BuilderHeader } from "../components/BuilderHeader";
 import { CanvasPane } from "../components/CanvasPane";
 import { InspectorPane } from "../components/InspectorPane";
@@ -89,27 +92,52 @@ export function EditorShell({ projectId }: EditorShellProps) {
     }
     if (!data || !("nodeId" in data)) return;
     const id = data.nodeId;
+    const nodes = useEditorStore.getState().document?.nodes ?? {};
+    const node = nodes[id];
+    if (!node) return;
+    const currentParent = parentOf(nodes, id);
 
-    // No container under the pointer → just nudge within the current parent.
-    if (!overNodeId || !e.over) {
-      moveNodeBy(id, e.delta.x, e.delta.y);
+    // Reparent into a different container under the pointer.
+    const reparent =
+      !!overNodeId &&
+      !!e.over &&
+      overNodeId !== currentParent &&
+      overNodeId !== id &&
+      !subtreeIds(nodes, id).includes(overNodeId);
+
+    if (reparent && overNodeId && e.over) {
+      const np = nodes[overNodeId];
+      const raw = dropPosition(e.active, e.over);
+      const snapped = snapBox(
+        { x: raw.x, y: raw.y, w: node.frame.w, h: node.frame.h },
+        np.children.map((c) => nodes[c].frame),
+        { w: np.frame.w, h: np.frame.h },
+      );
+      moveNode(id, overNodeId, snapped);
       return;
     }
 
-    const nodes = useEditorStore.getState().document?.nodes ?? {};
-    const currentParent = parentOf(nodes, id);
-    const intoSelfOrChild =
-      overNodeId === id || subtreeIds(nodes, id).includes(overNodeId);
-
-    if (overNodeId === currentParent || intoSelfOrChild) {
-      moveNodeBy(id, e.delta.x, e.delta.y);
-    } else {
-      moveNode(id, overNodeId, dropPosition(e.active, e.over));
-    }
+    // Same-parent reposition, snapped to siblings + container bounds.
+    const parent = currentParent ? nodes[currentParent] : null;
+    const siblings = parent
+      ? parent.children.filter((c) => c !== id).map((c) => nodes[c].frame)
+      : [];
+    const bounds = parent ? { w: parent.frame.w, h: parent.frame.h } : { w: 0, h: 0 };
+    const snapped = snapBox(
+      { x: node.frame.x + e.delta.x, y: node.frame.y + e.delta.y, w: node.frame.w, h: node.frame.h },
+      siblings,
+      bounds,
+    );
+    moveNodeBy(id, snapped.x - node.frame.x, snapped.y - node.frame.y);
   };
 
   return (
-    <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+    <DndContext
+      sensors={sensors}
+      modifiers={[snapModifier]}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+    >
       <div className="grid min-h-screen grid-rows-[auto_1fr] bg-canvas text-ink">
         <BuilderHeader projectId={projectId} />
         <div className="grid min-h-0 grid-cols-1 gap-3 p-3 lg:grid-cols-[260px_minmax(0,1fr)_320px]">
