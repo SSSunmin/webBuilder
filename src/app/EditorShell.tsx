@@ -7,12 +7,14 @@ import {
 } from "@dnd-kit/core";
 import type { Active, DragEndEvent, DragStartEvent, Over } from "@dnd-kit/core";
 import { useEffect, useState } from "react";
+import { guideStore } from "../canvas/guideStore";
 import { createSnapModifier, snapBox } from "../canvas/snap";
 import { getComponentDef } from "../registry";
 import { useEditorStore } from "../store/editorStore";
 import type { PageNode } from "../types/page";
+import { GuideOverlay } from "../components/GuideOverlay";
 
-const snapModifier = createSnapModifier();
+const snapModifier = createSnapModifier((g) => guideStore.set(g));
 import { BuilderHeader } from "../components/BuilderHeader";
 import { CanvasPane } from "../components/CanvasPane";
 import { InspectorPane } from "../components/InspectorPane";
@@ -82,6 +84,7 @@ export function EditorShell({ projectId }: EditorShellProps) {
 
   const onDragEnd = (e: DragEndEvent) => {
     setActiveLabel(null);
+    guideStore.clear();
     const data = e.active.data.current as ActiveData;
     const overNodeId = (e.over?.data.current as { nodeId?: string } | undefined)?.nodeId;
 
@@ -137,6 +140,10 @@ export function EditorShell({ projectId }: EditorShellProps) {
       modifiers={[snapModifier]}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onDragCancel={() => {
+        setActiveLabel(null);
+        guideStore.clear();
+      }}
     >
       <div className="grid min-h-screen grid-rows-[auto_1fr] bg-canvas text-ink">
         <BuilderHeader projectId={projectId} />
@@ -156,6 +163,7 @@ export function EditorShell({ projectId }: EditorShellProps) {
           </div>
         ) : null}
       </DragOverlay>
+      <GuideOverlay />
     </DndContext>
   );
 }
