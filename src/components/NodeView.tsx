@@ -9,7 +9,10 @@ import { useEditorStore } from "../store/editorStore";
 export function NodeView({ nodeId }: { nodeId: string }) {
   const node = useEditorStore((s) => s.document?.nodes[nodeId]);
   const rootId = useEditorStore((s) => s.document?.rootId);
-  const selected = useEditorStore((s) => s.selectedId === nodeId);
+  const selected = useEditorStore((s) => s.selectedIds.includes(nodeId));
+  const onlySelected = useEditorStore(
+    (s) => s.selectedIds.length === 1 && s.selectedIds[0] === nodeId,
+  );
   const selectNode = useEditorStore((s) => s.selectNode);
   const updateNodeFrame = useEditorStore((s) => s.updateNodeFrame);
 
@@ -89,7 +92,7 @@ export function NodeView({ nodeId }: { nodeId: string }) {
       style={base}
       onClick={(e) => {
         e.stopPropagation();
-        selectNode(nodeId);
+        selectNode(nodeId, e.shiftKey);
       }}
       className={[
         isRoot ? "shadow-card" : "cursor-grab active:cursor-grabbing",
@@ -101,7 +104,7 @@ export function NodeView({ nodeId }: { nodeId: string }) {
       ].join(" ")}
     >
       {def.render(node.props, childEls)}
-      {selected && (
+      {onlySelected && (
         <span
           onPointerDown={startResize}
           className="absolute -bottom-1 -right-1 z-20 h-3 w-3 cursor-se-resize rounded-sm border border-white bg-brand"

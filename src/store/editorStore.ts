@@ -4,6 +4,8 @@ import type { NodeFrame, PageDocument, PageNode } from "../types/page";
 
 const HISTORY_LIMIT = 50;
 
+export type AlignMode = "left" | "hcenter" | "right" | "top" | "vcenter" | "bottom";
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -43,14 +45,14 @@ function normalizeDocument(doc: PageDocument): PageDocument {
 
 interface EditorState {
   document: PageDocument | null;
-  selectedId: string | null;
+  selectedIds: string[];
   past: PageDocument[];
   future: PageDocument[];
   lastTag: string | null;
 
   loadDocument: (doc: PageDocument) => void;
   newDocument: (name: string) => PageDocument;
-  selectNode: (id: string | null) => void;
+  selectNode: (id: string | null, additive?: boolean) => void;
   addNode: (
     parentId: string,
     type: string,
@@ -62,25 +64,20 @@ interface EditorState {
   setNodeBackground: (id: string, background: string) => void;
   removeNode: (id: string) => void;
   moveNode: (id: string, newParentId: string, position?: { x: number; y: number }) => void;
+  alignNodes: (ids: string[], mode: AlignMode) => void;
+  distributeNodes: (ids: string[], axis: "h" | "v") => void;
   undo: () => void;
   redo: () => void;
 }
 
-function findParentId(
-  nodes: Record<string, PageNode>,
-  childId: string,
-): string | null {
+function findParentId(nodes: Record<string, PageNode>, childId: string): string | null {
   for (const node of Object.values(nodes)) {
     if (node.children.includes(childId)) return node.id;
   }
   return null;
 }
 
-function collectSubtree(
-  nodes: Record<string, PageNode>,
-  id: string,
-  acc: string[] = [],
-): string[] {
+function collectSubtree(nodes: Record<string, PageNode>, id: string, acc: string[] = []): string[] {
   acc.push(id);
   const node = nodes[id];
   if (node) {
@@ -95,10 +92,7 @@ function isContainer(nodes: Record<string, PageNode>, id: string): boolean {
 }
 
 export const useEditorStore = create<EditorState>((set, get) => {
-  const apply = (
-    producer: (doc: PageDocument) => PageDocument,
-    tag: string | null,
-  ) => {
+  const apply = (producer: (doc: PageDocument) => PageDocument, tag: string | null) => {
     const { document, past, lastTag } = get();
     if (!document) return;
     const next = producer(document);
@@ -112,22 +106,28 @@ export const useEditorStore = create<EditorState>((set, get) => {
     });
   };
 
-  const patchNode = (
-    id: string,
-    patch: (node: PageNode) => PageNode,
-    tag: string | null,
-  ) => {
+  const patchNode = (id: string, patch: (node: PageNode) => PageNode, tag: string | null) => {
     const doc = get().document;
     if (!doc || !doc.nodes[id]) return;
-    apply(
-      (d) => ({ ...d, nodes: { ...d.nodes, [id]: patch(d.nodes[id]) } }),
-      tag,
-    );
+    apply((d) => ({ ...d, nodes: { ...d.nodes, [id]: patch(d.nodes[id]) } }), tag);
+  };
+
+  /** Apply frame changes to many nodes in one history step. */
+  const patchFrames = (frames: Record<string, NodeFrame>, tag: string | null) => {
+    const doc = get().document;
+    if (!doc) return;
+    apply((d) => {
+      const nodes = { ...d.nodes };
+      for (const [id, frame] of Object.entries(frames)) {
+        if (nodes[id]) nodes[id] = { ...nodes[id], frame };
+      }
+      return { ...d, nodes };
+    }, tag);
   };
 
   return {
     document: null,
-    selectedId: null,
+    selectedIds: [],
     past: [],
     future: [],
     lastTag: null,
@@ -135,7 +135,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     loadDocument: (doc) =>
       set({
         document: normalizeDocument(doc),
-        selectedId: null,
+        selectedIds: [],
         past: [],
         future: [],
         lastTag: null,
@@ -143,11 +143,26 @@ export const useEditorStore = create<EditorState>((set, get) => {
 
     newDocument: (name) => {
       const doc = createDocument(name);
-      set({ document: doc, selectedId: null, past: [], future: [], lastTag: null });
+      set({ document: doc, selectedIds: [], past: [], future: [], lastTag: null });
       return doc;
     },
 
-    selectNode: (id) => set({ selectedId: id }),
+    selectNode: (id, additive) => {
+      if (id === null) {
+        set({ selectedIds: [] });
+        return;
+      }
+      if (!additive) {
+        set({ selectedIds: [id] });
+        return;
+      }
+      const current = get().selectedIds;
+      set({
+        selectedIds: current.includes(id)
+          ? current.filter((x) => x !== id)
+          : [...current, id],
+      });
+    },
 
     addNode: (parentId, type, position) => {
       const doc = get().document;
@@ -164,7 +179,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
           },
         };
       }, null);
-      set({ selectedId: node.id });
+      set({ selectedIds: [node.id] });
       return node.id;
     },
 
@@ -215,7 +230,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
         }
         return { ...d, nodes };
       }, null);
-      if (removedSet.has(get().selectedId ?? "")) set({ selectedId: null });
+      set({ selectedIds: get().selectedIds.filter((x) => !removedSet.has(x)) });
     },
 
     moveNode: (id, newParentId, position) => {
@@ -233,10 +248,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
           children: oldParent.children.filter((c) => c !== id),
         };
         const newParent = nodes[newParentId];
-        nodes[newParentId] = {
-          ...newParent,
-          children: [...newParent.children, id],
-        };
+        nodes[newParentId] = { ...newParent, children: [...newParent.children, id] };
         if (position) {
           nodes[id] = {
             ...nodes[id],
@@ -251,6 +263,58 @@ export const useEditorStore = create<EditorState>((set, get) => {
       }, null);
     },
 
+    alignNodes: (ids, mode) => {
+      const doc = get().document;
+      if (!doc || ids.length < 2) return;
+      const frames = ids.map((id) => doc.nodes[id]?.frame).filter(Boolean) as NodeFrame[];
+      const minX = Math.min(...frames.map((f) => f.x));
+      const maxR = Math.max(...frames.map((f) => f.x + f.w));
+      const minY = Math.min(...frames.map((f) => f.y));
+      const maxB = Math.max(...frames.map((f) => f.y + f.h));
+      const cx = (minX + maxR) / 2;
+      const cy = (minY + maxB) / 2;
+      const next: Record<string, NodeFrame> = {};
+      for (const id of ids) {
+        const f = doc.nodes[id]?.frame;
+        if (!f) continue;
+        const nf = { ...f };
+        if (mode === "left") nf.x = minX;
+        else if (mode === "right") nf.x = maxR - f.w;
+        else if (mode === "hcenter") nf.x = Math.round(cx - f.w / 2);
+        else if (mode === "top") nf.y = minY;
+        else if (mode === "bottom") nf.y = maxB - f.h;
+        else if (mode === "vcenter") nf.y = Math.round(cy - f.h / 2);
+        next[id] = nf;
+      }
+      patchFrames(next, null);
+    },
+
+    distributeNodes: (ids, axis) => {
+      const doc = get().document;
+      if (!doc || ids.length < 3) return;
+      const items = ids
+        .map((id) => ({ id, f: doc.nodes[id]?.frame }))
+        .filter((x): x is { id: string; f: NodeFrame } => Boolean(x.f));
+      const pos = (f: NodeFrame) => (axis === "h" ? f.x : f.y);
+      const size = (f: NodeFrame) => (axis === "h" ? f.w : f.h);
+      items.sort((a, b) => pos(a.f) - pos(b.f));
+      const first = items[0];
+      const last = items[items.length - 1];
+      const span = pos(last.f) + size(last.f) - pos(first.f);
+      const totalSize = items.reduce((sum, it) => sum + size(it.f), 0);
+      const gap = (span - totalSize) / (items.length - 1);
+      let cursor = pos(first.f);
+      const next: Record<string, NodeFrame> = {};
+      for (const it of items) {
+        const nf = { ...it.f };
+        if (axis === "h") nf.x = Math.round(cursor);
+        else nf.y = Math.round(cursor);
+        next[it.id] = nf;
+        cursor += size(it.f) + gap;
+      }
+      patchFrames(next, null);
+    },
+
     undo: () => {
       const { past, future, document } = get();
       if (!past.length || !document) return;
@@ -259,7 +323,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
         past: past.slice(0, -1),
         future: [document, ...future],
         lastTag: null,
-        selectedId: null,
+        selectedIds: [],
       });
     },
 
@@ -271,7 +335,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
         future: future.slice(1),
         past: [...past, document],
         lastTag: null,
-        selectedId: null,
+        selectedIds: [],
       });
     },
   };

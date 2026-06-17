@@ -96,11 +96,14 @@ function FrameField({
 }
 
 export function InspectorPane() {
-  const selectedId = useEditorStore((s) => s.selectedId);
+  const selectedIds = useEditorStore((s) => s.selectedIds);
+  const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
   const node = useEditorStore((s) =>
-    s.selectedId ? s.document?.nodes[s.selectedId] : undefined,
+    s.selectedIds.length === 1 ? s.document?.nodes[s.selectedIds[0]] : undefined,
   );
-  const isRoot = useEditorStore((s) => s.selectedId === s.document?.rootId);
+  const isRoot = useEditorStore(
+    (s) => s.selectedIds.length === 1 && s.document?.rootId === s.selectedIds[0],
+  );
   const updateNodeProps = useEditorStore((s) => s.updateNodeProps);
   const updateNodeFrame = useEditorStore((s) => s.updateNodeFrame);
   const setNodeBackground = useEditorStore((s) => s.setNodeBackground);
@@ -116,9 +119,14 @@ export function InspectorPane() {
         속성{def ? ` · ${def.label}` : ""}
       </h2>
       <div className="flex-1 overflow-auto p-4">
-        {!node || !def || !selectedId ? (
+        {selectedIds.length >= 2 ? (
           <p className="text-sm text-muted">
-            캔버스나 레이어에서 컴포넌트를 선택하세요.
+            여러 개 선택됨 ({selectedIds.length}). 캔버스 상단의 정렬 도구를
+            사용하세요.
+          </p>
+        ) : !node || !def || !selectedId ? (
+          <p className="text-sm text-muted">
+            캔버스나 레이어에서 컴포넌트를 선택하세요. (Shift+클릭으로 다중 선택)
           </p>
         ) : (
           <div className="flex flex-col gap-4">

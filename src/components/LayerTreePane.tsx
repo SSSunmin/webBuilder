@@ -4,7 +4,7 @@ import { useEditorStore } from "../store/editorStore";
 function TreeRow({ nodeId, depth }: { nodeId: string; depth: number }) {
   const node = useEditorStore((s) => s.document?.nodes[nodeId]);
   const rootId = useEditorStore((s) => s.document?.rootId);
-  const selected = useEditorStore((s) => s.selectedId === nodeId);
+  const selected = useEditorStore((s) => s.selectedIds.includes(nodeId));
   const selectNode = useEditorStore((s) => s.selectNode);
   const removeNode = useEditorStore((s) => s.removeNode);
 
@@ -14,7 +14,7 @@ function TreeRow({ nodeId, depth }: { nodeId: string; depth: number }) {
   return (
     <>
       <div
-        onClick={() => selectNode(nodeId)}
+        onClick={(e) => selectNode(nodeId, e.shiftKey)}
         className={`group flex cursor-pointer items-center gap-1 rounded-chip py-1 pr-1 text-sm transition ${
           selected ? "bg-brand-pale text-brand" : "hover:bg-line2 text-ink2"
         }`}
