@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { createNode, getComponentDef } from "../registry";
 import type { PageDocument, PageNode } from "../types/page";
 
+const HISTORY_LIMIT = 50;
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -22,6 +24,10 @@ export function createDocument(name: string): PageDocument {
 interface EditorState {
   document: PageDocument | null;
   selectedId: string | null;
+  past: PageDocument[];
+  future: PageDocument[];
+  /** Tag of the last commit, used to coalesce rapid edits (e.g. prop typing). */
+  lastTag: string | null;
 
   loadDocument: (doc: PageDocument) => void;
   newDocument: (name: string) => PageDocument;
@@ -30,9 +36,10 @@ interface EditorState {
   updateNodeProps: (id: string, partial: Record<string, unknown>) => void;
   removeNode: (id: string) => void;
   moveNode: (id: string, newParentId: string, index?: number) => void;
+  undo: () => void;
+  redo: () => void;
 }
 
-/** Find the id of the node whose children include `childId`. */
 function findParentId(
   nodes: Record<string, PageNode>,
   childId: string,
@@ -43,7 +50,6 @@ function findParentId(
   return null;
 }
 
-/** Collect `id` and all of its descendant ids. */
 function collectSubtree(
   nodes: Record<string, PageNode>,
   id: string,
@@ -62,112 +68,140 @@ function isContainer(nodes: Record<string, PageNode>, id: string): boolean {
   return node ? Boolean(getComponentDef(node.type)?.isContainer) : false;
 }
 
-export const useEditorStore = create<EditorState>((set, get) => ({
-  document: null,
-  selectedId: null,
-
-  loadDocument: (doc) => set({ document: doc, selectedId: null }),
-
-  newDocument: (name) => {
-    const doc = createDocument(name);
-    set({ document: doc, selectedId: null });
-    return doc;
-  },
-
-  selectNode: (id) => set({ selectedId: id }),
-
-  addNode: (parentId, type, index) => {
-    const doc = get().document;
-    if (!doc) return null;
-    const parent = doc.nodes[parentId];
-    if (!parent || !isContainer(doc.nodes, parentId)) return null;
-
-    const node = createNode(type);
-    const children = [...parent.children];
-    const at = index ?? children.length;
-    children.splice(at, 0, node.id);
-
+export const useEditorStore = create<EditorState>((set, get) => {
+  /** Apply a change, recording history. Same non-null tag as the previous
+   * commit coalesces (no new undo step) — keeps prop typing to one step. */
+  const apply = (
+    producer: (doc: PageDocument) => PageDocument,
+    tag: string | null,
+  ) => {
+    const { document, past, lastTag } = get();
+    if (!document) return;
+    const next = producer(document);
+    if (next === document) return;
+    const coalesce = tag !== null && tag === lastTag;
     set({
-      document: {
-        ...doc,
-        nodes: {
-          ...doc.nodes,
-          [node.id]: node,
-          [parentId]: { ...parent, children },
+      document: next,
+      past: coalesce ? past : [...past, document].slice(-HISTORY_LIMIT),
+      future: [],
+      lastTag: tag,
+    });
+  };
+
+  return {
+    document: null,
+    selectedId: null,
+    past: [],
+    future: [],
+    lastTag: null,
+
+    loadDocument: (doc) =>
+      set({ document: doc, selectedId: null, past: [], future: [], lastTag: null }),
+
+    newDocument: (name) => {
+      const doc = createDocument(name);
+      set({ document: doc, selectedId: null, past: [], future: [], lastTag: null });
+      return doc;
+    },
+
+    selectNode: (id) => set({ selectedId: id }),
+
+    addNode: (parentId, type, index) => {
+      const doc = get().document;
+      if (!doc) return null;
+      if (!isContainer(doc.nodes, parentId)) return null;
+      const node = createNode(type);
+      apply((d) => {
+        const parent = d.nodes[parentId];
+        const children = [...parent.children];
+        children.splice(index ?? children.length, 0, node.id);
+        return {
+          ...d,
+          nodes: { ...d.nodes, [node.id]: node, [parentId]: { ...parent, children } },
+        };
+      }, null);
+      set({ selectedId: node.id });
+      return node.id;
+    },
+
+    updateNodeProps: (id, partial) => {
+      const doc = get().document;
+      if (!doc || !doc.nodes[id]) return;
+      apply(
+        (d) => {
+          const node = d.nodes[id];
+          return {
+            ...d,
+            nodes: { ...d.nodes, [id]: { ...node, props: { ...node.props, ...partial } } },
+          };
         },
-      },
-      selectedId: node.id,
-    });
-    return node.id;
-  },
+        `props:${id}:${Object.keys(partial).join(",")}`,
+      );
+    },
 
-  updateNodeProps: (id, partial) => {
-    const doc = get().document;
-    if (!doc) return;
-    const node = doc.nodes[id];
-    if (!node) return;
-    set({
-      document: {
-        ...doc,
-        nodes: {
-          ...doc.nodes,
-          [id]: { ...node, props: { ...node.props, ...partial } },
-        },
-      },
-    });
-  },
+    removeNode: (id) => {
+      const doc = get().document;
+      if (!doc || id === doc.rootId) return;
+      const parentId = findParentId(doc.nodes, id);
+      const removedSet = new Set(collectSubtree(doc.nodes, id));
+      apply((d) => {
+        const nodes: Record<string, PageNode> = {};
+        for (const [nodeId, node] of Object.entries(d.nodes)) {
+          if (removedSet.has(nodeId)) continue;
+          nodes[nodeId] =
+            nodeId === parentId
+              ? { ...node, children: node.children.filter((c) => c !== id) }
+              : node;
+        }
+        return { ...d, nodes };
+      }, null);
+      if (removedSet.has(get().selectedId ?? "")) set({ selectedId: null });
+    },
 
-  removeNode: (id) => {
-    const doc = get().document;
-    if (!doc || id === doc.rootId) return; // never remove the root
+    moveNode: (id, newParentId, index) => {
+      const doc = get().document;
+      if (!doc || id === doc.rootId || id === newParentId) return;
+      if (!isContainer(doc.nodes, newParentId)) return;
+      if (collectSubtree(doc.nodes, id).includes(newParentId)) return;
+      const oldParentId = findParentId(doc.nodes, id);
+      if (!oldParentId) return;
+      apply((d) => {
+        const nodes = { ...d.nodes };
+        const oldParent = nodes[oldParentId];
+        nodes[oldParentId] = {
+          ...oldParent,
+          children: oldParent.children.filter((c) => c !== id),
+        };
+        const newParent = nodes[newParentId];
+        const children = [...newParent.children];
+        children.splice(index ?? children.length, 0, id);
+        nodes[newParentId] = { ...newParent, children };
+        return { ...d, nodes };
+      }, null);
+    },
 
-    const parentId = findParentId(doc.nodes, id);
-    const removed = collectSubtree(doc.nodes, id);
-    const removedSet = new Set(removed);
+    undo: () => {
+      const { past, future, document } = get();
+      if (!past.length || !document) return;
+      set({
+        document: past[past.length - 1],
+        past: past.slice(0, -1),
+        future: [document, ...future],
+        lastTag: null,
+        selectedId: null,
+      });
+    },
 
-    const nodes: Record<string, PageNode> = {};
-    for (const [nodeId, node] of Object.entries(doc.nodes)) {
-      if (removedSet.has(nodeId)) continue;
-      nodes[nodeId] =
-        nodeId === parentId
-          ? { ...node, children: node.children.filter((c) => c !== id) }
-          : node;
-    }
-
-    set({
-      document: { ...doc, nodes },
-      selectedId: removedSet.has(get().selectedId ?? "")
-        ? null
-        : get().selectedId,
-    });
-  },
-
-  moveNode: (id, newParentId, index) => {
-    const doc = get().document;
-    if (!doc || id === doc.rootId || id === newParentId) return;
-    if (!isContainer(doc.nodes, newParentId)) return;
-    // Disallow moving a node into its own subtree.
-    if (collectSubtree(doc.nodes, id).includes(newParentId)) return;
-
-    const oldParentId = findParentId(doc.nodes, id);
-    if (!oldParentId) return;
-
-    const nodes = { ...doc.nodes };
-
-    // Remove from old parent.
-    const oldParent = nodes[oldParentId];
-    nodes[oldParentId] = {
-      ...oldParent,
-      children: oldParent.children.filter((c) => c !== id),
-    };
-
-    // Insert into new parent (re-read in case it equals old parent).
-    const newParent = nodes[newParentId];
-    const children = [...newParent.children];
-    const at = index ?? children.length;
-    children.splice(at, 0, id);
-    nodes[newParentId] = { ...newParent, children };
-
-    set({ document: { ...doc, nodes } });
-  },
-}));
+    redo: () => {
+      const { past, future, document } = get();
+      if (!future.length || !document) return;
+      set({
+        document: future[0],
+        future: future.slice(1),
+        past: [...past, document],
+        lastTag: null,
+        selectedId: null,
+      });
+    },
+  };
+});

@@ -6,7 +6,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getComponentDef } from "../registry";
 import { useEditorStore } from "../store/editorStore";
 import { BuilderHeader } from "../components/BuilderHeader";
@@ -27,7 +27,20 @@ type ActiveData =
 export function EditorShell({ projectId }: EditorShellProps) {
   const addNode = useEditorStore((s) => s.addNode);
   const moveNode = useEditorStore((s) => s.moveNode);
+  const undo = useEditorStore((s) => s.undo);
+  const redo = useEditorStore((s) => s.redo);
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z") return;
+      e.preventDefault();
+      if (e.shiftKey) redo();
+      else undo();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
