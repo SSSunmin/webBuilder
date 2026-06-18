@@ -4,6 +4,12 @@ import type { PageNode } from "../types/page";
 
 // --- prop readers (props values are typed as unknown) ---
 const s = (v: unknown, d = ""): string => (typeof v === "string" ? v : d);
+const num = (v: unknown, d = 0): number => (typeof v === "number" ? v : d);
+const list = (v: unknown): string[] =>
+  s(v)
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
 
 const TEXT_SIZE: Record<string, string> = {
   sm: "text-sm",
@@ -77,6 +83,32 @@ const definitions: ComponentDef[] = [
     toCode: (_node, childrenCode) => `<Sidebar>\n${childrenCode}\n</Sidebar>`,
   },
   {
+    type: "Navbar",
+    label: "Navbar",
+    category: "레이아웃",
+    isContainer: false,
+    defaultSize: { w: 960, h: 60 },
+    defaultBackground: "#ffffff",
+    props: [
+      { key: "brand", label: "브랜드", control: "text", default: "BigValue" },
+      { key: "links", label: "메뉴(쉼표)", control: "text", default: "기능,요금,문의" },
+    ],
+    render: (props) => (
+      <div className="flex h-full w-full items-center justify-between border-b border-line px-5">
+        <span className="text-base font-bold tracking-tight text-brand">
+          {s(props.brand, "Brand")}
+        </span>
+        <div className="flex items-center gap-5 text-sm font-medium text-ink2">
+          {list(props.links).map((l, i) => (
+            <span key={i}>{l}</span>
+          ))}
+        </div>
+      </div>
+    ),
+    toCode: (node) =>
+      `<Navbar${attr("brand", node.props.brand)}${attr("links", node.props.links)} />`,
+  },
+  {
     type: "Header",
     label: "Header",
     category: "레이아웃",
@@ -101,15 +133,50 @@ const definitions: ComponentDef[] = [
       `<Header${attr("title", node.props.title)}${attr("subtitle", node.props.subtitle)} />`,
   },
   {
+    type: "Hero",
+    label: "Hero",
+    category: "레이아웃",
+    isContainer: false,
+    defaultSize: { w: 960, h: 360 },
+    defaultBackground: "#ecebfc",
+    props: [
+      { key: "eyebrow", label: "상단 라벨", control: "text", default: "AI 부동산 분석" },
+      { key: "title", label: "제목", control: "text", default: "데이터로 판단의 기준을 만듭니다" },
+      { key: "subtitle", label: "부제목", control: "text", default: "신뢰 가능한 데이터로 더 빠른 의사결정을." },
+      { key: "cta", label: "버튼", control: "text", default: "무료로 체험하기" },
+    ],
+    render: (props) => (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-8 text-center">
+        {s(props.eyebrow) && (
+          <span className="rounded-pill bg-white/70 px-3 py-1 text-xs font-semibold text-brand">
+            {s(props.eyebrow)}
+          </span>
+        )}
+        <span className="text-3xl font-bold tracking-tight text-ink">
+          {s(props.title, "제목")}
+        </span>
+        {s(props.subtitle) && (
+          <span className="text-base text-muted">{s(props.subtitle)}</span>
+        )}
+        <span className="mt-2 rounded-button bg-brand px-5 py-2 text-sm font-semibold text-white shadow-card">
+          {s(props.cta, "버튼")}
+        </span>
+      </div>
+    ),
+    toCode: (node) =>
+      `<Hero${attr("eyebrow", node.props.eyebrow)}${attr("title", node.props.title)}${attr(
+        "subtitle",
+        node.props.subtitle,
+      )}${attr("cta", node.props.cta)} />`,
+  },
+  {
     type: "Footer",
     label: "Footer",
     category: "레이아웃",
     isContainer: false,
     defaultSize: { w: 960, h: 80 },
     defaultBackground: "#25252f",
-    props: [
-      { key: "text", label: "텍스트", control: "text", default: "© BigValue" },
-    ],
+    props: [{ key: "text", label: "텍스트", control: "text", default: "© BigValue" }],
     render: (props) => (
       <div className="flex h-full w-full items-center px-4 text-sm text-white/80">
         {s(props.text, "© BigValue")}
@@ -203,8 +270,7 @@ const definitions: ComponentDef[] = [
         {s(props.text, "링크")}
       </span>
     ),
-    toCode: (node) =>
-      `<a${attr("href", node.props.href)}>${s(node.props.text, "링크")}</a>`,
+    toCode: (node) => `<a${attr("href", node.props.href)}>${s(node.props.text, "링크")}</a>`,
   },
   {
     type: "Badge",
@@ -232,32 +298,53 @@ const definitions: ComponentDef[] = [
         </span>
       );
     },
-    toCode: (node) =>
-      `<Badge${attr("tone", node.props.tone)}>${s(node.props.text, "NEW")}</Badge>`,
+    toCode: (node) => `<Badge${attr("tone", node.props.tone)}>${s(node.props.text, "NEW")}</Badge>`,
   },
   {
-    type: "Stat",
-    label: "Stat",
+    type: "Avatar",
+    label: "Avatar",
     category: "콘텐츠",
     isContainer: false,
-    defaultSize: { w: 180, h: 96 },
-    defaultBackground: "#ffffff",
+    defaultSize: { w: 48, h: 48 },
     props: [
-      { key: "value", label: "값", control: "text", default: "1,234" },
-      { key: "label", label: "라벨", control: "text", default: "분석 건수" },
+      { key: "src", label: "이미지 URL", control: "text", default: "" },
+      { key: "initials", label: "이니셜", control: "text", default: "BV" },
+    ],
+    render: (props) => {
+      const src = s(props.src);
+      return src ? (
+        <img src={src} alt="" className="h-full w-full rounded-full object-cover" />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center rounded-full bg-brand-pale text-sm font-bold text-brand">
+          {s(props.initials, "BV")}
+        </div>
+      );
+    },
+    toCode: (node) =>
+      `<Avatar${attr("src", node.props.src)}${attr("initials", node.props.initials)} />`,
+  },
+  {
+    type: "TagList",
+    label: "TagList",
+    category: "콘텐츠",
+    isContainer: false,
+    defaultSize: { w: 260, h: 28 },
+    props: [
+      { key: "tags", label: "태그(쉼표)", control: "text", default: "데이터,분석,부동산" },
     ],
     render: (props) => (
-      <div className="flex h-full w-full flex-col justify-center px-4">
-        <span className="text-2xl font-bold tracking-tight text-brand">
-          {s(props.value, "0")}
-        </span>
-        <span className="mt-1 text-xs font-medium text-muted">
-          {s(props.label, "지표")}
-        </span>
+      <div className="flex h-full w-full flex-wrap items-center gap-2">
+        {list(props.tags).map((t, i) => (
+          <span
+            key={i}
+            className="rounded-pill bg-brand-pale px-2.5 py-0.5 text-xs font-semibold text-brand"
+          >
+            {t}
+          </span>
+        ))}
       </div>
     ),
-    toCode: (node) =>
-      `<Stat${attr("value", node.props.value)}${attr("label", node.props.label)} />`,
+    toCode: (node) => `<TagList${attr("tags", node.props.tags)} />`,
   },
   {
     type: "Image",
@@ -295,6 +382,76 @@ const definitions: ComponentDef[] = [
       </div>
     ),
     toCode: () => `<Divider />`,
+  },
+
+  // ---------- 데이터 ----------
+  {
+    type: "Stat",
+    label: "Stat",
+    category: "데이터",
+    isContainer: false,
+    defaultSize: { w: 180, h: 96 },
+    defaultBackground: "#ffffff",
+    props: [
+      { key: "value", label: "값", control: "text", default: "1,234" },
+      { key: "label", label: "라벨", control: "text", default: "분석 건수" },
+    ],
+    render: (props) => (
+      <div className="flex h-full w-full flex-col justify-center px-4">
+        <span className="text-2xl font-bold tracking-tight text-brand">
+          {s(props.value, "0")}
+        </span>
+        <span className="mt-1 text-xs font-medium text-muted">{s(props.label, "지표")}</span>
+      </div>
+    ),
+    toCode: (node) =>
+      `<Stat${attr("value", node.props.value)}${attr("label", node.props.label)} />`,
+  },
+  {
+    type: "ProgressBar",
+    label: "ProgressBar",
+    category: "데이터",
+    isContainer: false,
+    defaultSize: { w: 240, h: 12 },
+    props: [{ key: "value", label: "진행률(%)", control: "number", default: 60 }],
+    render: (props) => {
+      const pct = Math.max(0, Math.min(100, num(props.value, 0)));
+      return (
+        <div className="flex h-full w-full items-center">
+          <div className="h-2 w-full overflow-hidden rounded-pill bg-line2">
+            <div className="h-full rounded-pill bg-brand" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+      );
+    },
+    toCode: (node) => `<ProgressBar value={${num(node.props.value, 0)}} />`,
+  },
+  {
+    type: "Chart",
+    label: "Chart",
+    category: "데이터",
+    isContainer: false,
+    defaultSize: { w: 260, h: 160 },
+    defaultBackground: "#ffffff",
+    props: [{ key: "title", label: "제목", control: "text", default: "월별 추이" }],
+    render: (props) => {
+      const bars = [40, 65, 50, 80, 60, 95];
+      return (
+        <div className="flex h-full w-full flex-col p-3">
+          <span className="text-xs font-semibold text-ink2">{s(props.title, "차트")}</span>
+          <div className="mt-2 flex flex-1 items-end gap-1.5">
+            {bars.map((b, i) => (
+              <div
+                key={i}
+                className="flex-1 rounded-t-sm bg-brand-lighter"
+                style={{ height: `${b}%` }}
+              />
+            ))}
+          </div>
+        </div>
+      );
+    },
+    toCode: (node) => `<Chart${attr("title", node.props.title)} />`,
   },
 
   // ---------- 폼 ----------
