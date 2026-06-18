@@ -36,6 +36,9 @@ export interface PageNode {
   frame: NodeFrame;
   /** Optional background color (CSS color). */
   background?: string;
+  /** Corner radius (px). Applied to the node box so the background and
+   * border follow the same rounded corners. */
+  borderRadius?: number;
   /** Inner padding (per side) — children snap to the padded inner area. */
   padding?: Sides;
   /** Outer margin (per side) — siblings keep this gap when snapping. */

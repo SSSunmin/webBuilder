@@ -28,6 +28,8 @@ export interface ComponentDef {
   defaultSize: { w: number; h: number };
   /** Initial background color, if any. */
   defaultBackground?: string;
+  /** Initial corner radius (px) when the component is added. */
+  defaultBorderRadius?: number;
   props: PropSchema[];
   /** Canvas preview renderer. Fills its frame box; `children` are child nodes. */
   render: (props: Record<string, unknown>, children?: ReactNode) => ReactNode;

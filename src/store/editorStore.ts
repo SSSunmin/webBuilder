@@ -25,21 +25,27 @@ export function createDocument(name: string): PageDocument {
   };
 }
 
-/** Backfill frame/background on documents saved before free-positioning. */
+/** Backfill frame/background/radius on documents saved before these fields. */
 function normalizeDocument(doc: PageDocument): PageDocument {
   let changed = false;
   const nodes: Record<string, PageNode> = {};
   for (const [id, node] of Object.entries(doc.nodes)) {
-    if (node.frame) {
-      nodes[id] = node;
-      continue;
+    const def = getComponentDef(node.type);
+    let next = node;
+    if (!next.frame) {
+      next = {
+        ...next,
+        frame: defaultFrameFor(node.type),
+        background: next.background ?? def?.defaultBackground,
+      };
     }
-    changed = true;
-    nodes[id] = {
-      ...node,
-      frame: defaultFrameFor(node.type),
-      background: node.background ?? getComponentDef(node.type)?.defaultBackground,
-    };
+    // Backfill radius for nodes saved before the field existed so the
+    // canvas keeps matching each component's default rounded corners.
+    if (next.borderRadius === undefined && def?.defaultBorderRadius !== undefined) {
+      next = { ...next, borderRadius: def.defaultBorderRadius };
+    }
+    if (next !== node) changed = true;
+    nodes[id] = next;
   }
   return changed ? { ...doc, nodes } : doc;
 }
@@ -63,6 +69,7 @@ interface EditorState {
   updateNodeFrame: (id: string, partial: Partial<NodeFrame>, tag?: string) => void;
   moveNodeBy: (id: string, dx: number, dy: number, tag?: string) => void;
   setNodeBackground: (id: string, background: string) => void;
+  setNodeRadius: (id: string, borderRadius: number) => void;
   updateNodeSpacing: (
     id: string,
     partial: { padding?: Partial<Sides>; margin?: Partial<Sides> },
@@ -218,6 +225,13 @@ export const useEditorStore = create<EditorState>((set, get) => {
 
     setNodeBackground: (id, background) =>
       patchNode(id, (node) => ({ ...node, background }), `bg:${id}`),
+
+    setNodeRadius: (id, borderRadius) =>
+      patchNode(
+        id,
+        (node) => ({ ...node, borderRadius: Math.max(0, Math.round(borderRadius)) }),
+        `radius:${id}`,
+      ),
 
     updateNodeSpacing: (id, partial) => {
       const tag =

@@ -66,9 +66,10 @@ const definitions: ComponentDef[] = [
     isContainer: true,
     defaultSize: { w: 280, h: 180 },
     defaultBackground: "#ffffff",
+    defaultBorderRadius: 14,
     props: [],
     render: (_props, children) =>
-      containerBox(children, "rounded-card border border-line shadow-card"),
+      containerBox(children, "rounded-[inherit] border border-line shadow-card"),
     toCode: (_node, childrenCode) => `<Card>\n${childrenCode}\n</Card>`,
   },
   {

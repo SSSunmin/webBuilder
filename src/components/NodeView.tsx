@@ -76,6 +76,7 @@ export function NodeView({ nodeId }: { nodeId: string }) {
         height: node.frame.h,
         margin: "0 auto",
         background: node.background,
+        borderRadius: node.borderRadius,
       }
     : {
         position: "absolute",
@@ -84,6 +85,7 @@ export function NodeView({ nodeId }: { nodeId: string }) {
         width: node.frame.w,
         height: node.frame.h,
         background: node.background,
+        borderRadius: node.borderRadius,
         transform: CSS.Translate.toString(transform),
         zIndex: isDragging ? 1000 : selected ? 10 : undefined,
       };

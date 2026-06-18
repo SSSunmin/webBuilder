@@ -22,6 +22,8 @@ function frameStyle(node: PageNode, isRoot: boolean): string {
         `height: ${f.h}`,
       ];
   if (node.background) parts.push(`background: "${node.background}"`);
+  if (typeof node.borderRadius === "number")
+    parts.push(`borderRadius: ${node.borderRadius}`);
   return `{{ ${parts.join(", ")} }}`;
 }
 
