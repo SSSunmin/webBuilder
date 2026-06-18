@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import type { ComponentDef } from "../types/component";
-import type { PageNode } from "../types/page";
 
 // --- prop readers (props values are typed as unknown) ---
 const s = (v: unknown, d = ""): string => (typeof v === "string" ? v : d);
