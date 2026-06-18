@@ -154,8 +154,11 @@ export function createSnapModifier(
   onGuides?: (g: { vx: number[]; hy: number[] }) => void,
   threshold = SNAP_THRESHOLD,
 ): Modifier {
-  return ({ active, transform, draggingNodeRect }) => {
-    if (!active || !draggingNodeRect) return transform;
+  return ({ active, transform, activeNodeRect, draggingNodeRect }) => {
+    // Use the active node's real rect (the actual component), not the drag
+    // overlay/placeholder rect, so snapping is based on the true size.
+    const rect = activeNodeRect ?? draggingNodeRect;
+    if (!active || !rect) return transform;
     const nodeId = String(active.id).replace(/^drag:/, "");
     const draggedEl = document.querySelector(`[data-node-id="${nodeId}"]`);
     const container = draggedEl?.parentElement?.closest("[data-node-id]") ?? null;
@@ -168,10 +171,10 @@ export function createSnapModifier(
     });
 
     const moving: SnapBox = {
-      x: draggingNodeRect.left + transform.x,
-      y: draggingNodeRect.top + transform.y,
-      w: draggingNodeRect.width,
-      h: draggingNodeRect.height,
+      x: rect.left + transform.x,
+      y: rect.top + transform.y,
+      w: rect.width,
+      h: rect.height,
       margin: marginOf(draggedEl),
     };
 

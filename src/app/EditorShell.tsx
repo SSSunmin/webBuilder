@@ -90,11 +90,13 @@ export function EditorShell({ projectId }: EditorShellProps) {
 
   const onDragStart = (e: DragStartEvent) => {
     const data = e.active.data.current as ActiveData;
+    // Only show a floating label for palette drags (no canvas element yet).
+    // Node drags move the real element in place, so no overlay — this also
+    // keeps the snap modifier measuring the real component size.
     if (data && "kind" in data && data.kind === "palette") {
       setActiveLabel(getComponentDef(data.type)?.label ?? data.type);
-    } else if (data && "nodeId" in data) {
-      const type = useEditorStore.getState().document?.nodes[data.nodeId]?.type;
-      setActiveLabel(type ? getComponentDef(type)?.label ?? type : null);
+    } else {
+      setActiveLabel(null);
     }
   };
 
