@@ -12,6 +12,7 @@ import { createSnapModifier, snapBox } from "../canvas/snap";
 import type { Bounds, SnapBox } from "../canvas/snap";
 import { getComponentDef } from "../registry";
 import { useEditorStore } from "../store/editorStore";
+import { toSides } from "../types/page";
 import type { PageNode } from "../types/page";
 import { GuideOverlay } from "../components/GuideOverlay";
 
@@ -52,8 +53,8 @@ const boxOf = (n: PageNode): SnapBox => ({
 
 /** A container's padded inner rectangle (children snap to this). */
 const innerBounds = (n: PageNode): Bounds => {
-  const p = n.padding ?? 0;
-  return { x0: p, y0: p, x1: n.frame.w - p, y1: n.frame.h - p };
+  const p = toSides(n.padding);
+  return { x0: p.left, y0: p.top, x1: n.frame.w - p.right, y1: n.frame.h - p.bottom };
 };
 
 /** Position of the dropped item relative to the target container's box. */

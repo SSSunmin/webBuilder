@@ -1,4 +1,6 @@
 import type { Modifier } from "@dnd-kit/core";
+import { toSides } from "../types/page";
+import type { Sides } from "../types/page";
 
 export const SNAP_THRESHOLD = 6;
 
@@ -11,7 +13,7 @@ export interface Box {
 
 /** A box that may carry an outer margin (keeps a gap when others snap to it). */
 export interface SnapBox extends Box {
-  margin?: number;
+  margin?: Sides | number;
 }
 
 /** Inner snap rectangle (e.g. a container's padded area). */
@@ -80,18 +82,11 @@ function pick(a: AxisSnap | null, b: AxisSnap | null): AxisSnap | null {
   return Math.abs(b.delta) < Math.abs(a.delta) ? b : a;
 }
 
-function movingEdges(b: SnapBox, axis: "x" | "y"): number[] {
-  const m = b.margin ?? 0;
+function boxEdges(b: SnapBox, axis: "x" | "y"): number[] {
+  const m = toSides(b.margin);
   return axis === "x"
-    ? [b.x - m, b.x + b.w + m, b.x + b.w / 2]
-    : [b.y - m, b.y + b.h + m, b.y + b.h / 2];
-}
-
-function targetEdges(b: SnapBox, axis: "x" | "y"): number[] {
-  const m = b.margin ?? 0;
-  return axis === "x"
-    ? [b.x - m, b.x + b.w + m, b.x + b.w / 2]
-    : [b.y - m, b.y + b.h + m, b.y + b.h / 2];
+    ? [b.x - m.left, b.x + b.w + m.right, b.x + b.w / 2]
+    : [b.y - m.top, b.y + b.h + m.bottom, b.y + b.h / 2];
 }
 
 export interface SnapResult {
@@ -112,8 +107,8 @@ export function computeSnap(
   bounds: Bounds | null,
   threshold = SNAP_THRESHOLD,
 ): SnapResult {
-  const xEdges = movingEdges(moving, "x");
-  const yEdges = movingEdges(moving, "y");
+  const xEdges = boxEdges(moving, "x");
+  const yEdges = boxEdges(moving, "y");
   const xTargets: number[] = [];
   const yTargets: number[] = [];
   if (bounds) {
@@ -121,8 +116,8 @@ export function computeSnap(
     yTargets.push(bounds.y0, bounds.y1, (bounds.y0 + bounds.y1) / 2);
   }
   for (const o of others) {
-    xTargets.push(...targetEdges(o, "x"));
-    yTargets.push(...targetEdges(o, "y"));
+    xTargets.push(...boxEdges(o, "x"));
+    yTargets.push(...boxEdges(o, "y"));
   }
 
   const px = pick(edgeSnap(xEdges, xTargets, threshold), spacingSnap(moving, others, "x", threshold));
@@ -165,19 +160,30 @@ export function createSnapModifier(
     const draggedEl = document.querySelector(`[data-node-id="${nodeId}"]`);
     const container = draggedEl?.parentElement?.closest("[data-node-id]") ?? null;
 
+    const marginOf = (el: Element | null): Sides => ({
+      top: numAttr(el, "data-mt"),
+      right: numAttr(el, "data-mr"),
+      bottom: numAttr(el, "data-mb"),
+      left: numAttr(el, "data-ml"),
+    });
+
     const moving: SnapBox = {
       x: draggingNodeRect.left + transform.x,
       y: draggingNodeRect.top + transform.y,
       w: draggingNodeRect.width,
       h: draggingNodeRect.height,
-      margin: numAttr(draggedEl, "data-margin"),
+      margin: marginOf(draggedEl),
     };
 
     let bounds: Bounds | null = null;
     if (container) {
       const cr = container.getBoundingClientRect();
-      const p = numAttr(container, "data-padding");
-      bounds = { x0: cr.left + p, y0: cr.top + p, x1: cr.right - p, y1: cr.bottom - p };
+      bounds = {
+        x0: cr.left + numAttr(container, "data-pl"),
+        y0: cr.top + numAttr(container, "data-pt"),
+        x1: cr.right - numAttr(container, "data-pr"),
+        y1: cr.bottom - numAttr(container, "data-pb"),
+      };
     }
 
     const others: SnapBox[] = [];
@@ -186,7 +192,7 @@ export function createSnapModifier(
       const par = el.parentElement?.closest("[data-node-id]");
       if (par !== container) return; // siblings only
       const r = el.getBoundingClientRect();
-      others.push({ x: r.left, y: r.top, w: r.width, h: r.height, margin: numAttr(el, "data-margin") });
+      others.push({ x: r.left, y: r.top, w: r.width, h: r.height, margin: marginOf(el) });
     });
 
     const snap = computeSnap(moving, others, bounds, threshold);

@@ -5,6 +5,28 @@ export interface NodeFrame {
   h: number;
 }
 
+/** Per-side spacing values (px). */
+export interface Sides {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export const ZERO_SIDES: Sides = { top: 0, right: 0, bottom: 0, left: 0 };
+
+/** Normalize a side value that may be a uniform number, a Sides, or missing. */
+export function toSides(v: Sides | number | undefined | null): Sides {
+  if (v == null) return ZERO_SIDES;
+  if (typeof v === "number") return { top: v, right: v, bottom: v, left: v };
+  return {
+    top: v.top ?? 0,
+    right: v.right ?? 0,
+    bottom: v.bottom ?? 0,
+    left: v.left ?? 0,
+  };
+}
+
 export interface PageNode {
   id: string;
   type: string;
@@ -14,10 +36,10 @@ export interface PageNode {
   frame: NodeFrame;
   /** Optional background color (CSS color). */
   background?: string;
-  /** Inner padding (px) — children snap to the padded inner area. */
-  padding?: number;
-  /** Outer margin (px) — siblings keep this gap when snapping to this node. */
-  margin?: number;
+  /** Inner padding (per side) — children snap to the padded inner area. */
+  padding?: Sides;
+  /** Outer margin (per side) — siblings keep this gap when snapping. */
+  margin?: Sides;
 }
 
 export interface PageDocument {

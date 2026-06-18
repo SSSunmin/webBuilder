@@ -2,7 +2,45 @@ import type { ReactNode } from "react";
 import { getComponentDef } from "../registry";
 import { useEditorStore } from "../store/editorStore";
 import type { PropSchema } from "../types/component";
-import type { NodeFrame } from "../types/page";
+import { toSides } from "../types/page";
+import type { NodeFrame, Sides } from "../types/page";
+
+const SIDES: { key: keyof Sides; label: string }[] = [
+  { key: "top", label: "상" },
+  { key: "right", label: "우" },
+  { key: "bottom", label: "하" },
+  { key: "left", label: "좌" },
+];
+
+function SidesField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: Sides;
+  onChange: (side: keyof Sides, v: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted">{label}</span>
+      <div className="grid grid-cols-4 gap-1">
+        {SIDES.map((s) => (
+          <div key={s.key} className="flex flex-col items-center gap-0.5">
+            <input
+              type="number"
+              title={s.label}
+              className="h-8 w-full rounded-button border border-line px-1 text-center text-xs focus:border-brand focus:outline-none"
+              value={Math.round(value[s.key])}
+              onChange={(e) => onChange(s.key, e.target.value === "" ? 0 : Number(e.target.value))}
+            />
+            <span className="text-[10px] text-muted">{s.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const inputCls =
   "h-9 w-full rounded-button border border-line px-2 text-sm focus:border-brand focus:outline-none";
@@ -169,23 +207,23 @@ export function InspectorPane() {
                   </button>
                 </div>
               </label>
-              {(def.isContainer || !isRoot) && (
-                <div className="grid grid-cols-2 gap-2">
-                  {def.isContainer && (
-                    <FrameField
-                      label="패딩"
-                      value={node.padding ?? 0}
-                      onChange={(v) => updateNodeSpacing(selectedId, { padding: v })}
-                    />
-                  )}
-                  {!isRoot && (
-                    <FrameField
-                      label="마진"
-                      value={node.margin ?? 0}
-                      onChange={(v) => updateNodeSpacing(selectedId, { margin: v })}
-                    />
-                  )}
-                </div>
+              {def.isContainer && (
+                <SidesField
+                  label="패딩"
+                  value={toSides(node.padding)}
+                  onChange={(side, v) =>
+                    updateNodeSpacing(selectedId, { padding: { [side]: v } })
+                  }
+                />
+              )}
+              {!isRoot && (
+                <SidesField
+                  label="마진"
+                  value={toSides(node.margin)}
+                  onChange={(side, v) =>
+                    updateNodeSpacing(selectedId, { margin: { [side]: v } })
+                  }
+                />
               )}
             </div>
 

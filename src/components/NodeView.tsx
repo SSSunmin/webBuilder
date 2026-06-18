@@ -3,6 +3,7 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { getComponentDef } from "../registry";
 import { useEditorStore } from "../store/editorStore";
+import { toSides } from "../types/page";
 
 /** Recursively renders a node and its subtree on the canvas with absolute
  * positioning, wired for selection, drag-to-move, drop (containers), resize. */
@@ -29,6 +30,10 @@ export function NodeView({ nodeId }: { nodeId: string }) {
     useDraggable({ id: `drag:${nodeId}`, data: { nodeId }, disabled: isRoot });
 
   if (!node || !def) return null;
+
+  const pad = toSides(node.padding);
+  const mar = toSides(node.margin);
+  const hasPadding = pad.top || pad.right || pad.bottom || pad.left;
 
   const setRefs = (el: HTMLElement | null) => {
     dropRef(el);
@@ -87,8 +92,14 @@ export function NodeView({ nodeId }: { nodeId: string }) {
     <div
       ref={setRefs}
       data-node-id={nodeId}
-      data-padding={node.padding ?? 0}
-      data-margin={node.margin ?? 0}
+      data-pt={pad.top}
+      data-pr={pad.right}
+      data-pb={pad.bottom}
+      data-pl={pad.left}
+      data-mt={mar.top}
+      data-mr={mar.right}
+      data-mb={mar.bottom}
+      data-ml={mar.left}
       {...attributes}
       {...listeners}
       style={base}
@@ -106,12 +117,12 @@ export function NodeView({ nodeId }: { nodeId: string }) {
       ].join(" ")}
     >
       {def.render(node.props, childEls)}
-      {onlySelected && container && (node.padding ?? 0) > 0 && (
+      {onlySelected && container && hasPadding ? (
         <div
           className="pointer-events-none absolute border border-dashed border-brand-light"
-          style={{ inset: node.padding }}
+          style={{ top: pad.top, right: pad.right, bottom: pad.bottom, left: pad.left }}
         />
-      )}
+      ) : null}
       {onlySelected && (
         <span
           onPointerDown={startResize}

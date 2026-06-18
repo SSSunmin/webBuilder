@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createNode, defaultFrameFor, getComponentDef } from "../registry";
-import type { NodeFrame, PageDocument, PageNode } from "../types/page";
+import { toSides } from "../types/page";
+import type { NodeFrame, PageDocument, PageNode, Sides } from "../types/page";
 
 const HISTORY_LIMIT = 50;
 
@@ -62,7 +63,10 @@ interface EditorState {
   updateNodeFrame: (id: string, partial: Partial<NodeFrame>, tag?: string) => void;
   moveNodeBy: (id: string, dx: number, dy: number, tag?: string) => void;
   setNodeBackground: (id: string, background: string) => void;
-  updateNodeSpacing: (id: string, partial: { padding?: number; margin?: number }) => void;
+  updateNodeSpacing: (
+    id: string,
+    partial: { padding?: Partial<Sides>; margin?: Partial<Sides> },
+  ) => void;
   removeNode: (id: string) => void;
   moveNode: (id: string, newParentId: string, position?: { x: number; y: number }) => void;
   alignNodes: (ids: string[], mode: AlignMode) => void;
@@ -215,12 +219,30 @@ export const useEditorStore = create<EditorState>((set, get) => {
     setNodeBackground: (id, background) =>
       patchNode(id, (node) => ({ ...node, background }), `bg:${id}`),
 
-    updateNodeSpacing: (id, partial) =>
+    updateNodeSpacing: (id, partial) => {
+      const tag =
+        `spacing:${id}:` +
+        [
+          partial.padding && "p" + Object.keys(partial.padding).join(","),
+          partial.margin && "m" + Object.keys(partial.margin).join(","),
+        ]
+          .filter(Boolean)
+          .join("|");
       patchNode(
         id,
-        (node) => ({ ...node, ...partial }),
-        `spacing:${id}:${Object.keys(partial).join(",")}`,
-      ),
+        (node) => {
+          const next = { ...node };
+          if (partial.padding) {
+            next.padding = { ...toSides(node.padding), ...partial.padding };
+          }
+          if (partial.margin) {
+            next.margin = { ...toSides(node.margin), ...partial.margin };
+          }
+          return next;
+        },
+        tag,
+      );
+    },
 
     removeNode: (id) => {
       const doc = get().document;
