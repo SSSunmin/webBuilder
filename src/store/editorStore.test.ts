@@ -60,6 +60,32 @@ describe("distributeNodes", () => {
   });
 });
 
+describe("reorderNode", () => {
+  it("swaps a node forward/backward among its siblings", () => {
+    const rootId = store().document!.rootId;
+    const a = store().addNode(rootId, "Card")!;
+    const b = store().addNode(rootId, "Card")!;
+    const c = store().addNode(rootId, "Card")!;
+    expect(store().document!.nodes[rootId].children).toEqual([a, b, c]);
+
+    store().reorderNode(a, "forward");
+    expect(store().document!.nodes[rootId].children).toEqual([b, a, c]);
+
+    store().reorderNode(a, "backward");
+    expect(store().document!.nodes[rootId].children).toEqual([a, b, c]);
+  });
+
+  it("is a no-op at the ends", () => {
+    const rootId = store().document!.rootId;
+    const a = store().addNode(rootId, "Card")!;
+    const b = store().addNode(rootId, "Card")!;
+    store().reorderNode(a, "backward"); // already first
+    expect(store().document!.nodes[rootId].children).toEqual([a, b]);
+    store().reorderNode(b, "forward"); // already last
+    expect(store().document!.nodes[rootId].children).toEqual([a, b]);
+  });
+});
+
 describe("undo / redo", () => {
   it("reverts and re-applies the last change", () => {
     const id = addAt(0, 0, 100, 40);

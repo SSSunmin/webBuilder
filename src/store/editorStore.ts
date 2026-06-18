@@ -76,6 +76,8 @@ interface EditorState {
   ) => void;
   removeNode: (id: string) => void;
   moveNode: (id: string, newParentId: string, position?: { x: number; y: number }) => void;
+  /** Reorder among siblings: "forward" = toward front (top of stack). */
+  reorderNode: (id: string, dir: "forward" | "backward") => void;
   alignNodes: (ids: string[], mode: AlignMode) => void;
   distributeNodes: (ids: string[], axis: "h" | "v") => void;
   undo: () => void;
@@ -305,6 +307,23 @@ export const useEditorStore = create<EditorState>((set, get) => {
         }
         return { ...d, nodes };
       }, null);
+    },
+
+    reorderNode: (id, dir) => {
+      const doc = get().document;
+      if (!doc) return;
+      const parentId = findParentId(doc.nodes, id);
+      if (!parentId) return;
+      const parent = doc.nodes[parentId];
+      const i = parent.children.indexOf(id);
+      const j = dir === "forward" ? i + 1 : i - 1;
+      if (j < 0 || j >= parent.children.length) return;
+      const children = [...parent.children];
+      [children[i], children[j]] = [children[j], children[i]];
+      apply(
+        (d) => ({ ...d, nodes: { ...d.nodes, [parentId]: { ...d.nodes[parentId], children } } }),
+        null,
+      );
     },
 
     alignNodes: (ids, mode) => {
