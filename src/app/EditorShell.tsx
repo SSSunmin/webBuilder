@@ -9,6 +9,7 @@ import type { Active, DragEndEvent, DragStartEvent, Over } from "@dnd-kit/core";
 import { useEffect, useState } from "react";
 import { guideStore } from "../canvas/guideStore";
 import { createSnapModifier, snapBox } from "../canvas/snap";
+import type { Bounds, SnapBox } from "../canvas/snap";
 import { getComponentDef } from "../registry";
 import { useEditorStore } from "../store/editorStore";
 import type { PageNode } from "../types/page";
@@ -40,6 +41,20 @@ function subtreeIds(nodes: Record<string, PageNode>, id: string, acc: string[] =
   for (const c of nodes[id]?.children ?? []) subtreeIds(nodes, c, acc);
   return acc;
 }
+
+const boxOf = (n: PageNode): SnapBox => ({
+  x: n.frame.x,
+  y: n.frame.y,
+  w: n.frame.w,
+  h: n.frame.h,
+  margin: n.margin,
+});
+
+/** A container's padded inner rectangle (children snap to this). */
+const innerBounds = (n: PageNode): Bounds => {
+  const p = n.padding ?? 0;
+  return { x0: p, y0: p, x1: n.frame.w - p, y1: n.frame.h - p };
+};
 
 /** Position of the dropped item relative to the target container's box. */
 function dropPosition(active: Active, over: Over): { x: number; y: number } {
@@ -111,26 +126,31 @@ export function EditorShell({ projectId }: EditorShellProps) {
     if (reparent && overNodeId && e.over) {
       const np = nodes[overNodeId];
       const raw = dropPosition(e.active, e.over);
-      const snapped = snapBox(
-        { x: raw.x, y: raw.y, w: node.frame.w, h: node.frame.h },
-        np.children.map((c) => nodes[c].frame),
-        { w: np.frame.w, h: np.frame.h },
-      );
+      const moving: SnapBox = {
+        x: raw.x,
+        y: raw.y,
+        w: node.frame.w,
+        h: node.frame.h,
+        margin: node.margin,
+      };
+      const snapped = snapBox(moving, np.children.map((c) => boxOf(nodes[c])), innerBounds(np));
       moveNode(id, overNodeId, snapped);
       return;
     }
 
-    // Same-parent reposition, snapped to siblings + container bounds.
+    // Same-parent reposition, snapped to siblings + the container's padded bounds.
     const parent = currentParent ? nodes[currentParent] : null;
     const siblings = parent
-      ? parent.children.filter((c) => c !== id).map((c) => nodes[c].frame)
+      ? parent.children.filter((c) => c !== id).map((c) => boxOf(nodes[c]))
       : [];
-    const bounds = parent ? { w: parent.frame.w, h: parent.frame.h } : { w: 0, h: 0 };
-    const snapped = snapBox(
-      { x: node.frame.x + e.delta.x, y: node.frame.y + e.delta.y, w: node.frame.w, h: node.frame.h },
-      siblings,
-      bounds,
-    );
+    const moving: SnapBox = {
+      x: node.frame.x + e.delta.x,
+      y: node.frame.y + e.delta.y,
+      w: node.frame.w,
+      h: node.frame.h,
+      margin: node.margin,
+    };
+    const snapped = snapBox(moving, siblings, parent ? innerBounds(parent) : null);
     moveNodeBy(id, snapped.x - node.frame.x, snapped.y - node.frame.y);
   };
 

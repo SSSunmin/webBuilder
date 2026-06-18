@@ -107,6 +107,7 @@ export function InspectorPane() {
   const updateNodeProps = useEditorStore((s) => s.updateNodeProps);
   const updateNodeFrame = useEditorStore((s) => s.updateNodeFrame);
   const setNodeBackground = useEditorStore((s) => s.setNodeBackground);
+  const updateNodeSpacing = useEditorStore((s) => s.updateNodeSpacing);
 
   const def = node ? getComponentDef(node.type) : undefined;
 
@@ -168,6 +169,24 @@ export function InspectorPane() {
                   </button>
                 </div>
               </label>
+              {(def.isContainer || !isRoot) && (
+                <div className="grid grid-cols-2 gap-2">
+                  {def.isContainer && (
+                    <FrameField
+                      label="패딩"
+                      value={node.padding ?? 0}
+                      onChange={(v) => updateNodeSpacing(selectedId, { padding: v })}
+                    />
+                  )}
+                  {!isRoot && (
+                    <FrameField
+                      label="마진"
+                      value={node.margin ?? 0}
+                      onChange={(v) => updateNodeSpacing(selectedId, { margin: v })}
+                    />
+                  )}
+                </div>
+              )}
             </div>
 
             {def.props.length > 0 && (

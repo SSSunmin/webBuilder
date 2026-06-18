@@ -62,6 +62,7 @@ interface EditorState {
   updateNodeFrame: (id: string, partial: Partial<NodeFrame>, tag?: string) => void;
   moveNodeBy: (id: string, dx: number, dy: number, tag?: string) => void;
   setNodeBackground: (id: string, background: string) => void;
+  updateNodeSpacing: (id: string, partial: { padding?: number; margin?: number }) => void;
   removeNode: (id: string) => void;
   moveNode: (id: string, newParentId: string, position?: { x: number; y: number }) => void;
   alignNodes: (ids: string[], mode: AlignMode) => void;
@@ -213,6 +214,13 @@ export const useEditorStore = create<EditorState>((set, get) => {
 
     setNodeBackground: (id, background) =>
       patchNode(id, (node) => ({ ...node, background }), `bg:${id}`),
+
+    updateNodeSpacing: (id, partial) =>
+      patchNode(
+        id,
+        (node) => ({ ...node, ...partial }),
+        `spacing:${id}:${Object.keys(partial).join(",")}`,
+      ),
 
     removeNode: (id) => {
       const doc = get().document;

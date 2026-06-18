@@ -14,6 +14,10 @@ export interface PageNode {
   frame: NodeFrame;
   /** Optional background color (CSS color). */
   background?: string;
+  /** Inner padding (px) — children snap to the padded inner area. */
+  padding?: number;
+  /** Outer margin (px) — siblings keep this gap when snapping to this node. */
+  margin?: number;
 }
 
 export interface PageDocument {

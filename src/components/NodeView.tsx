@@ -87,6 +87,8 @@ export function NodeView({ nodeId }: { nodeId: string }) {
     <div
       ref={setRefs}
       data-node-id={nodeId}
+      data-padding={node.padding ?? 0}
+      data-margin={node.margin ?? 0}
       {...attributes}
       {...listeners}
       style={base}
@@ -104,6 +106,12 @@ export function NodeView({ nodeId }: { nodeId: string }) {
       ].join(" ")}
     >
       {def.render(node.props, childEls)}
+      {onlySelected && container && (node.padding ?? 0) > 0 && (
+        <div
+          className="pointer-events-none absolute border border-dashed border-brand-light"
+          style={{ inset: node.padding }}
+        />
+      )}
       {onlySelected && (
         <span
           onPointerDown={startResize}
