@@ -48,6 +48,7 @@ export function createNode(type: string, position?: { x: number; y: number }): P
     children: [],
     frame: defaultFrameFor(type, position),
     background: def.defaultBackground,
+    borderRadius: def.defaultBorderRadius,
   };
 }
 

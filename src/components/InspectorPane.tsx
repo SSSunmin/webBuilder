@@ -145,6 +145,7 @@ export function InspectorPane() {
   const updateNodeProps = useEditorStore((s) => s.updateNodeProps);
   const updateNodeFrame = useEditorStore((s) => s.updateNodeFrame);
   const setNodeBackground = useEditorStore((s) => s.setNodeBackground);
+  const setNodeRadius = useEditorStore((s) => s.setNodeRadius);
   const updateNodeSpacing = useEditorStore((s) => s.updateNodeSpacing);
 
   const def = node ? getComponentDef(node.type) : undefined;
@@ -206,6 +207,18 @@ export function InspectorPane() {
                     투명
                   </button>
                 </div>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted">모서리 둥글기(px)</span>
+                <input
+                  type="number"
+                  min={0}
+                  className={inputCls}
+                  value={Math.round(node.borderRadius ?? 0)}
+                  onChange={(e) =>
+                    setNodeRadius(selectedId, e.target.value === "" ? 0 : Number(e.target.value))
+                  }
+                />
               </label>
               {def.isContainer && (
                 <SidesField
