@@ -24,6 +24,9 @@ export interface ComponentDef {
   category: string;
   /** Whether this component accepts child nodes. */
   isContainer: boolean;
+  /** Hide from the palette while keeping the definition registered (so saved
+   * documents that still reference this type render and export correctly). */
+  hidden?: boolean;
   /** Initial width/height (px) when the component is added. */
   defaultSize: { w: number; h: number };
   /** Initial background color, if any. */

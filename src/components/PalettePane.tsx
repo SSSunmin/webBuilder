@@ -1,6 +1,11 @@
 import { useDraggable } from "@dnd-kit/core";
-import { listComponents } from "../registry";
+import { listBlocks, listComponents } from "../registry";
 import type { ComponentDef } from "../types/component";
+
+const itemCls = (isDragging: boolean) =>
+  `h-9 cursor-grab rounded-button border border-line bg-line2 px-3 text-left text-sm font-medium text-ink2 transition hover:border-brand-lightest hover:bg-brand-pale active:cursor-grabbing ${
+    isDragging ? "opacity-40" : ""
+  }`;
 
 function PaletteItem({ type, label }: { type: string; label: string }) {
   const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
@@ -8,14 +13,19 @@ function PaletteItem({ type, label }: { type: string; label: string }) {
     data: { kind: "palette", type },
   });
   return (
-    <button
-      ref={setNodeRef}
-      {...attributes}
-      {...listeners}
-      className={`h-9 cursor-grab rounded-button border border-line bg-line2 px-3 text-left text-sm font-medium text-ink2 transition hover:border-brand-lightest hover:bg-brand-pale active:cursor-grabbing ${
-        isDragging ? "opacity-40" : ""
-      }`}
-    >
+    <button ref={setNodeRef} {...attributes} {...listeners} className={itemCls(isDragging)}>
+      {label}
+    </button>
+  );
+}
+
+function BlockItem({ blockKey, label }: { blockKey: string; label: string }) {
+  const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
+    id: `block:${blockKey}`,
+    data: { kind: "block", blockKey },
+  });
+  return (
+    <button ref={setNodeRef} {...attributes} {...listeners} className={itemCls(isDragging)}>
       {label}
     </button>
   );
@@ -36,6 +46,7 @@ function groupByCategory(defs: ComponentDef[]): [string, ComponentDef[]][] {
 
 export function PalettePane() {
   const groups = groupByCategory(listComponents());
+  const blocks = listBlocks();
   return (
     <aside className="flex min-h-0 flex-col overflow-hidden rounded-card border border-line bg-white shadow-card">
       <div className="border-b border-line px-4 py-2">
@@ -43,6 +54,18 @@ export function PalettePane() {
         <p className="mt-0.5 text-xs text-muted">드래그해서 캔버스에 추가</p>
       </div>
       <div className="flex-1 overflow-auto p-3">
+        {blocks.length > 0 && (
+          <div className="mb-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+              블록
+            </p>
+            <div className="grid gap-2">
+              {blocks.map((b) => (
+                <BlockItem key={b.key} blockKey={b.key} label={b.label} />
+              ))}
+            </div>
+          </div>
+        )}
         {groups.map(([category, items]) => (
           <div key={category} className="mb-4 last:mb-0">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">

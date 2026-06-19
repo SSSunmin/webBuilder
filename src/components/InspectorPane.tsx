@@ -93,6 +93,28 @@ function PropField({
         </label>
       );
       break;
+    case "color":
+      control = (
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            // Disabled while empty ("기본색") so opening the picker can't silently
+            // commit #000000 as the value.
+            disabled={!(typeof value === "string" && value)}
+            className="h-9 w-10 rounded-button border border-line disabled:opacity-40"
+            value={typeof value === "string" && value ? value : "#000000"}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="비우면 기본"
+            className={inputCls}
+            value={typeof value === "string" ? value : ""}
+            onChange={(e) => onChange(e.target.value)}
+          />
+        </div>
+      );
+      break;
     default:
       control = (
         <input
