@@ -96,6 +96,13 @@ export interface SnapResult {
   hGuides: number[];
 }
 
+export interface ResizeSnapResult {
+  w: number;
+  h: number;
+  vGuides: number[];
+  hGuides: number[];
+}
+
 /**
  * Compute snap deltas for a moving box against sibling boxes (edges/centers,
  * margin-aware) and an inner bounds rectangle (a container's padded area),
@@ -131,6 +138,38 @@ export function computeSnap(
   };
 }
 
+/**
+ * Snap the bottom-right corner of a top-left-anchored resizing box to sibling
+ * edges/centers (margin-aware) and the container's inner bounds.
+ */
+export function snapResize(
+  box: SnapBox,
+  others: SnapBox[],
+  bounds: Bounds | null,
+  threshold = SNAP_THRESHOLD,
+): ResizeSnapResult {
+  const xTargets: number[] = [];
+  const yTargets: number[] = [];
+  if (bounds) {
+    xTargets.push(bounds.x0, bounds.x1, (bounds.x0 + bounds.x1) / 2);
+    yTargets.push(bounds.y0, bounds.y1, (bounds.y0 + bounds.y1) / 2);
+  }
+  for (const o of others) {
+    xTargets.push(...boxEdges(o, "x"));
+    yTargets.push(...boxEdges(o, "y"));
+  }
+
+  const xSnap = edgeSnap([box.x + box.w], xTargets, threshold);
+  const ySnap = edgeSnap([box.y + box.h], yTargets, threshold);
+
+  return {
+    w: box.w + (xSnap?.delta ?? 0),
+    h: box.h + (ySnap?.delta ?? 0),
+    vGuides: xSnap?.guides ?? [],
+    hGuides: ySnap?.guides ?? [],
+  };
+}
+
 /** Frame-space convenience for drop: returns the snapped top-left position. */
 export function snapBox(
   moving: SnapBox,
@@ -144,6 +183,45 @@ export function snapBox(
 
 function numAttr(el: Element | null, name: string): number {
   return el ? parseFloat(el.getAttribute(name) ?? "0") || 0 : 0;
+}
+
+function marginOf(el: Element | null): Sides {
+  return {
+    top: numAttr(el, "data-mt"),
+    right: numAttr(el, "data-mr"),
+    bottom: numAttr(el, "data-mb"),
+    left: numAttr(el, "data-ml"),
+  };
+}
+
+export function domSnapContext(draggedEl: Element | null): {
+  others: SnapBox[];
+  bounds: Bounds | null;
+  container: Element | null;
+} {
+  const container = draggedEl?.parentElement?.closest("[data-node-id]") ?? null;
+
+  let bounds: Bounds | null = null;
+  if (container) {
+    const cr = container.getBoundingClientRect();
+    bounds = {
+      x0: cr.left + numAttr(container, "data-pl"),
+      y0: cr.top + numAttr(container, "data-pt"),
+      x1: cr.right - numAttr(container, "data-pr"),
+      y1: cr.bottom - numAttr(container, "data-pb"),
+    };
+  }
+
+  const others: SnapBox[] = [];
+  document.querySelectorAll("[data-node-id]").forEach((el) => {
+    if (el === draggedEl || el === container) return;
+    const par = el.parentElement?.closest("[data-node-id]");
+    if (par !== container) return;
+    const r = el.getBoundingClientRect();
+    others.push({ x: r.left, y: r.top, w: r.width, h: r.height, margin: marginOf(el) });
+  });
+
+  return { others, bounds, container };
 }
 
 /**
@@ -161,14 +239,7 @@ export function createSnapModifier(
     if (!active || !rect) return transform;
     const nodeId = String(active.id).replace(/^drag:/, "");
     const draggedEl = document.querySelector(`[data-node-id="${nodeId}"]`);
-    const container = draggedEl?.parentElement?.closest("[data-node-id]") ?? null;
-
-    const marginOf = (el: Element | null): Sides => ({
-      top: numAttr(el, "data-mt"),
-      right: numAttr(el, "data-mr"),
-      bottom: numAttr(el, "data-mb"),
-      left: numAttr(el, "data-ml"),
-    });
+    const { others, bounds } = domSnapContext(draggedEl);
 
     const moving: SnapBox = {
       x: rect.left + transform.x,
@@ -177,26 +248,6 @@ export function createSnapModifier(
       h: rect.height,
       margin: marginOf(draggedEl),
     };
-
-    let bounds: Bounds | null = null;
-    if (container) {
-      const cr = container.getBoundingClientRect();
-      bounds = {
-        x0: cr.left + numAttr(container, "data-pl"),
-        y0: cr.top + numAttr(container, "data-pt"),
-        x1: cr.right - numAttr(container, "data-pr"),
-        y1: cr.bottom - numAttr(container, "data-pb"),
-      };
-    }
-
-    const others: SnapBox[] = [];
-    document.querySelectorAll("[data-node-id]").forEach((el) => {
-      if (el === draggedEl || el === container) return;
-      const par = el.parentElement?.closest("[data-node-id]");
-      if (par !== container) return; // siblings only
-      const r = el.getBoundingClientRect();
-      others.push({ x: r.left, y: r.top, w: r.width, h: r.height, margin: marginOf(el) });
-    });
 
     const snap = computeSnap(moving, others, bounds, threshold);
     onGuides?.({ vx: snap.vGuides, hy: snap.hGuides });

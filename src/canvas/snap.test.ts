@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeSnap, snapBox, type Bounds, type SnapBox } from "./snap";
+import { computeSnap, snapBox, snapResize, type Bounds, type SnapBox } from "./snap";
 
 const box = (x: number, y: number, w = 100, h = 40): SnapBox => ({ x, y, w, h });
 
@@ -40,5 +40,27 @@ describe("snapBox", () => {
   it("returns the snapped top-left position", () => {
     const pos = snapBox(box(103, 203), [box(100, 200)], null);
     expect(pos).toEqual({ x: 100, y: 200 });
+  });
+});
+
+describe("snapResize", () => {
+  it("snaps the right edge to a sibling's left edge when within threshold", () => {
+    const r = snapResize(box(0, 0, 97, 40), [box(100, 0)], null);
+    expect(r.w).toBe(100);
+    expect(r.vGuides).toContain(100);
+  });
+
+  it("snaps the bottom edge to the container bounds y1 when within threshold", () => {
+    const bounds: Bounds = { x0: 0, y0: 0, x1: 400, y1: 400 };
+    const r = snapResize(box(0, 0, 100, 396), [], bounds);
+    expect(r.h).toBe(400);
+  });
+
+  it("returns the box unchanged when nothing is within threshold", () => {
+    const r = snapResize(box(0, 0, 100, 40), [box(500, 500)], null);
+    expect(r.w).toBe(100);
+    expect(r.h).toBe(40);
+    expect(r.vGuides).toEqual([]);
+    expect(r.hGuides).toEqual([]);
   });
 });
