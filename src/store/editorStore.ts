@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { createNode, defaultFrameFor, getComponentDef } from "../registry";
+import { createNode, defaultFrameFor, getBlockDef, getComponentDef } from "../registry";
 import { toSides } from "../types/page";
 import type { NodeFrame, PageDocument, PageNode, Sides } from "../types/page";
 
@@ -65,6 +65,12 @@ interface EditorState {
     type: string,
     position?: { x: number; y: number },
   ) => string | null;
+  /** Insert a composable block (a section container + child nodes) as one step. */
+  addBlock: (
+    parentId: string,
+    blockKey: string,
+    position?: { x: number; y: number },
+  ) => string | null;
   updateNodeProps: (id: string, partial: Record<string, unknown>) => void;
   updateNodeFrame: (id: string, partial: Partial<NodeFrame>, tag?: string) => void;
   moveNodeBy: (id: string, dx: number, dy: number, tag?: string) => void;
@@ -75,9 +81,15 @@ interface EditorState {
     partial: { padding?: Partial<Sides>; margin?: Partial<Sides> },
   ) => void;
   removeNode: (id: string) => void;
+  /** Deep-clone a node (and its subtree) with fresh ids next to the original. */
+  duplicateNode: (id: string) => string | null;
   moveNode: (id: string, newParentId: string, position?: { x: number; y: number }) => void;
   /** Reorder among siblings: "forward" = toward front (top of stack). */
   reorderNode: (id: string, dir: "forward" | "backward") => void;
+  /** Move a node to be the last child of a container. */
+  moveNodeInto: (id: string, parentId: string) => void;
+  /** Place a node just before/after a reference node among its siblings. */
+  moveNodeAdjacent: (id: string, refId: string, side: "before" | "after") => void;
   alignNodes: (ids: string[], mode: AlignMode) => void;
   distributeNodes: (ids: string[], axis: "h" | "v") => void;
   undo: () => void;
@@ -91,7 +103,7 @@ function findParentId(nodes: Record<string, PageNode>, childId: string): string 
   return null;
 }
 
-function collectSubtree(nodes: Record<string, PageNode>, id: string, acc: string[] = []): string[] {
+export function collectSubtree(nodes: Record<string, PageNode>, id: string, acc: string[] = []): string[] {
   acc.push(id);
   const node = nodes[id];
   if (node) {
@@ -197,6 +209,40 @@ export const useEditorStore = create<EditorState>((set, get) => {
       return node.id;
     },
 
+    addBlock: (parentId, blockKey, position) => {
+      const doc = get().document;
+      if (!doc || !isContainer(doc.nodes, parentId)) return null;
+      const block = getBlockDef(blockKey);
+      if (!block) return null;
+      // Guard the section type so createNode never throws and children can nest.
+      if (!getComponentDef(block.section.type)?.isContainer) return null;
+
+      const section = createNode(block.section.type, position);
+      section.frame = { ...section.frame, w: block.section.size.w, h: block.section.size.h };
+      if (block.section.background !== undefined) section.background = block.section.background;
+      if (block.section.props) section.props = { ...section.props, ...block.section.props };
+
+      const childNodes = block.children.map((spec) => {
+        const child = createNode(spec.type);
+        child.frame = { ...spec.frame };
+        if (spec.props) child.props = { ...child.props, ...spec.props };
+        if (spec.background !== undefined) child.background = spec.background;
+        if (spec.borderRadius !== undefined) child.borderRadius = spec.borderRadius;
+        return child;
+      });
+      section.children = childNodes.map((c) => c.id);
+
+      apply((d) => {
+        const parent = d.nodes[parentId];
+        const nodes = { ...d.nodes, [section.id]: section };
+        for (const child of childNodes) nodes[child.id] = child;
+        nodes[parentId] = { ...parent, children: [...parent.children, section.id] };
+        return { ...d, nodes };
+      }, null);
+      set({ selectedIds: [section.id] });
+      return section.id;
+    },
+
     updateNodeProps: (id, partial) =>
       patchNode(
         id,
@@ -279,6 +325,50 @@ export const useEditorStore = create<EditorState>((set, get) => {
       set({ selectedIds: get().selectedIds.filter((x) => !removedSet.has(x)) });
     },
 
+    duplicateNode: (id) => {
+      const doc = get().document;
+      if (!doc || id === doc.rootId) return null;
+      const parentId = findParentId(doc.nodes, id);
+      if (!parentId) return null;
+
+      // Fresh id for every node in the subtree, then remap children + offset
+      // the top-level copy so it doesn't sit exactly on the original.
+      const subtree = collectSubtree(doc.nodes, id);
+      const idMap = new Map(subtree.map((old) => [old, crypto.randomUUID()]));
+      const clones: Record<string, PageNode> = {};
+      for (const oldId of subtree) {
+        const n = doc.nodes[oldId];
+        const newId = idMap.get(oldId)!;
+        clones[newId] = {
+          ...n,
+          id: newId,
+          children: n.children.filter((c) => idMap.has(c)).map((c) => idMap.get(c)!),
+          frame: { ...n.frame },
+          props: { ...n.props },
+          ...(n.padding ? { padding: { ...n.padding } } : {}),
+          ...(n.margin ? { margin: { ...n.margin } } : {}),
+        };
+      }
+      const newRootId = idMap.get(id)!;
+      const root = clones[newRootId];
+      clones[newRootId] = {
+        ...root,
+        frame: { ...root.frame, x: root.frame.x + 16, y: root.frame.y + 16 },
+      };
+
+      apply((d) => {
+        const parent = d.nodes[parentId];
+        const children = [...parent.children];
+        children.splice(children.indexOf(id) + 1, 0, newRootId);
+        return {
+          ...d,
+          nodes: { ...d.nodes, ...clones, [parentId]: { ...parent, children } },
+        };
+      }, null);
+      set({ selectedIds: [newRootId] });
+      return newRootId;
+    },
+
     moveNode: (id, newParentId, position) => {
       const doc = get().document;
       if (!doc || id === doc.rootId || id === newParentId) return;
@@ -326,6 +416,48 @@ export const useEditorStore = create<EditorState>((set, get) => {
       );
     },
 
+    moveNodeInto: (id, parentId) => {
+      const doc = get().document;
+      if (!doc || id === doc.rootId || id === parentId) return;
+      if (!isContainer(doc.nodes, parentId)) return;
+      if (collectSubtree(doc.nodes, id).includes(parentId)) return;
+      const oldParentId = findParentId(doc.nodes, id);
+      if (!oldParentId) return;
+      apply((d) => {
+        const nodes = { ...d.nodes };
+        nodes[oldParentId] = {
+          ...nodes[oldParentId],
+          children: nodes[oldParentId].children.filter((c) => c !== id),
+        };
+        const np = nodes[parentId];
+        nodes[parentId] = { ...np, children: [...np.children, id] };
+        return { ...d, nodes };
+      }, null);
+    },
+
+    moveNodeAdjacent: (id, refId, side) => {
+      const doc = get().document;
+      if (!doc || id === doc.rootId || id === refId) return;
+      const refParentId = findParentId(doc.nodes, refId);
+      if (!refParentId) return; // can't place a sibling of the root
+      if (collectSubtree(doc.nodes, id).includes(refParentId)) return;
+      const oldParentId = findParentId(doc.nodes, id);
+      if (!oldParentId) return;
+      apply((d) => {
+        const nodes = { ...d.nodes };
+        nodes[oldParentId] = {
+          ...nodes[oldParentId],
+          children: nodes[oldParentId].children.filter((c) => c !== id),
+        };
+        const rp = nodes[refParentId];
+        const children = [...rp.children];
+        const refIndex = children.indexOf(refId);
+        children.splice(side === "before" ? refIndex : refIndex + 1, 0, id);
+        nodes[refParentId] = { ...rp, children };
+        return { ...d, nodes };
+      }, null);
+    },
+
     alignNodes: (ids, mode) => {
       const doc = get().document;
       if (!doc || ids.length < 2) return;
@@ -358,23 +490,22 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const items = ids
         .map((id) => ({ id, f: doc.nodes[id]?.frame }))
         .filter((x): x is { id: string; f: NodeFrame } => Boolean(x.f));
-      const pos = (f: NodeFrame) => (axis === "h" ? f.x : f.y);
-      const size = (f: NodeFrame) => (axis === "h" ? f.w : f.h);
-      items.sort((a, b) => pos(a.f) - pos(b.f));
-      const first = items[0];
-      const last = items[items.length - 1];
-      const span = pos(last.f) + size(last.f) - pos(first.f);
-      const totalSize = items.reduce((sum, it) => sum + size(it.f), 0);
-      const gap = (span - totalSize) / (items.length - 1);
-      let cursor = pos(first.f);
+      if (items.length < 3) return;
+      const center = (f: NodeFrame) => (axis === "h" ? f.x + f.w / 2 : f.y + f.h / 2);
+      // Even out the centers between the first and last item (both stay put),
+      // so differently-sized components read as evenly spaced.
+      items.sort((a, b) => center(a.f) - center(b.f));
+      const firstC = center(items[0].f);
+      const lastC = center(items[items.length - 1].f);
+      const step = (lastC - firstC) / (items.length - 1);
       const next: Record<string, NodeFrame> = {};
-      for (const it of items) {
+      items.forEach((it, i) => {
+        const targetCenter = firstC + i * step;
         const nf = { ...it.f };
-        if (axis === "h") nf.x = Math.round(cursor);
-        else nf.y = Math.round(cursor);
+        if (axis === "h") nf.x = Math.round(targetCenter - it.f.w / 2);
+        else nf.y = Math.round(targetCenter - it.f.h / 2);
         next[it.id] = nf;
-        cursor += size(it.f) + gap;
-      }
+      });
       patchFrames(next, null);
     },
 

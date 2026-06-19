@@ -6,9 +6,9 @@ const byType = new Map<string, ComponentDef>(
   componentDefs.map((def) => [def.type, def]),
 );
 
-/** All registered component definitions (palette order). */
+/** Component definitions shown in the palette (hidden/legacy ones excluded). */
 export function listComponents(): ComponentDef[] {
-  return componentDefs;
+  return componentDefs.filter((def) => !def.hidden);
 }
 
 /** Look up a component definition by type. Returns undefined if unknown. */
@@ -53,3 +53,5 @@ export function createNode(type: string, position?: { x: number; y: number }): P
 }
 
 export { componentDefs };
+export { blockDefs, listBlocks, getBlockDef } from "./blocks";
+export type { BlockDef, BlockChildSpec } from "./blocks";

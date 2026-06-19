@@ -2,6 +2,8 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { getComponentDef } from "../registry";
+import { guideStore } from "../canvas/guideStore";
+import { domSnapContext, snapResize } from "../canvas/snap";
 import { useEditorStore } from "../store/editorStore";
 import { toSides } from "../types/page";
 
@@ -51,19 +53,33 @@ export function NodeView({ nodeId }: { nodeId: string }) {
     const startY = e.clientY;
     const startW = node.frame.w;
     const startH = node.frame.h;
+    const el = document.querySelector(`[data-node-id="${nodeId}"]`);
+    const rect = el?.getBoundingClientRect();
+    const { others, bounds } = domSnapContext(el);
     const onMove = (ev: globalThis.PointerEvent) => {
+      const rawW = startW + (ev.clientX - startX);
+      const rawH = startH + (ev.clientY - startY);
+      const moving = {
+        x: rect?.left ?? node.frame.x,
+        y: rect?.top ?? node.frame.y,
+        w: Math.max(20, rawW),
+        h: Math.max(20, rawH),
+      };
+      const snapped = snapResize(moving, others, bounds);
       updateNodeFrame(
         nodeId,
         {
-          w: Math.max(20, Math.round(startW + (ev.clientX - startX))),
-          h: Math.max(20, Math.round(startH + (ev.clientY - startY))),
+          w: Math.max(20, Math.round(snapped.w)),
+          h: Math.max(20, Math.round(snapped.h)),
         },
         `resize:${nodeId}`,
       );
+      guideStore.set({ vx: snapped.vGuides, hy: snapped.hGuides });
     };
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      guideStore.clear();
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);

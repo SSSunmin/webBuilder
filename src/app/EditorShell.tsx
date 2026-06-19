@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import { guideStore } from "../canvas/guideStore";
 import { createSnapModifier, snapBox } from "../canvas/snap";
 import type { Bounds, SnapBox } from "../canvas/snap";
-import { getComponentDef } from "../registry";
+import { getBlockDef, getComponentDef } from "../registry";
 import { useEditorStore } from "../store/editorStore";
 import { toSides } from "../types/page";
 import type { PageNode } from "../types/page";
@@ -27,6 +27,7 @@ type EditorShellProps = { projectId: string };
 
 type ActiveData =
   | { kind: "palette"; type: string }
+  | { kind: "block"; blockKey: string }
   | { nodeId: string }
   | undefined;
 
@@ -67,6 +68,7 @@ function dropPosition(active: Active, over: Over): { x: number; y: number } {
 
 export function EditorShell({ projectId }: EditorShellProps) {
   const addNode = useEditorStore((s) => s.addNode);
+  const addBlock = useEditorStore((s) => s.addBlock);
   const moveNode = useEditorStore((s) => s.moveNode);
   const moveNodeBy = useEditorStore((s) => s.moveNodeBy);
   const undo = useEditorStore((s) => s.undo);
@@ -95,6 +97,8 @@ export function EditorShell({ projectId }: EditorShellProps) {
     // keeps the snap modifier measuring the real component size.
     if (data && "kind" in data && data.kind === "palette") {
       setActiveLabel(getComponentDef(data.type)?.label ?? data.type);
+    } else if (data && "kind" in data && data.kind === "block") {
+      setActiveLabel(getBlockDef(data.blockKey)?.label ?? data.blockKey);
     } else {
       setActiveLabel(null);
     }
@@ -109,6 +113,12 @@ export function EditorShell({ projectId }: EditorShellProps) {
     // Palette → add into the container at the drop point.
     if (data && "kind" in data && data.kind === "palette") {
       if (overNodeId && e.over) addNode(overNodeId, data.type, dropPosition(e.active, e.over));
+      return;
+    }
+
+    // Block → insert a composable section (container + children) at the drop point.
+    if (data && "kind" in data && data.kind === "block") {
+      if (overNodeId && e.over) addBlock(overNodeId, data.blockKey, dropPosition(e.active, e.over));
       return;
     }
     if (!data || !("nodeId" in data)) return;

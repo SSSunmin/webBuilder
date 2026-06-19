@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useEditorStore } from "../store/editorStore";
+import { collectSubtree, useEditorStore } from "../store/editorStore";
 import { AlignToolbar } from "./AlignToolbar";
 import { NodeView } from "./NodeView";
 
@@ -8,6 +8,7 @@ export function CanvasPane() {
   const selectedIds = useEditorStore((s) => s.selectedIds);
   const selectNode = useEditorStore((s) => s.selectNode);
   const removeNode = useEditorStore((s) => s.removeNode);
+  const duplicateNode = useEditorStore((s) => s.duplicateNode);
   const moveNodeBy = useEditorStore((s) => s.moveNodeBy);
 
   const single = selectedIds.length === 1 ? selectedIds[0] : null;
@@ -28,6 +29,25 @@ export function CanvasPane() {
         movable.forEach((id) => removeNode(id));
         return;
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        if (!movable.length) return;
+        // Skip any selection already inside another selected node's subtree —
+        // it gets cloned with its ancestor, so duplicating it again would
+        // double it. (Each top-level clone is its own undo step.)
+        const nodes = useEditorStore.getState().document?.nodes ?? {};
+        const topLevel = movable.filter(
+          (id) => !movable.some((o) => o !== id && collectSubtree(nodes, o).includes(id)),
+        );
+        const newIds = topLevel
+          .map((id) => duplicateNode(id))
+          .filter((x): x is string => Boolean(x));
+        if (newIds.length) {
+          selectNode(newIds[0]);
+          newIds.slice(1).forEach((nid) => selectNode(nid, true));
+        }
+        return;
+      }
       const step = e.shiftKey ? 10 : 1;
       const moves: Record<string, [number, number]> = {
         ArrowLeft: [-step, 0],
@@ -43,7 +63,7 @@ export function CanvasPane() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedIds, rootId, removeNode, moveNodeBy]);
+  }, [selectedIds, rootId, removeNode, duplicateNode, selectNode, moveNodeBy]);
 
   return (
     <main className="flex min-h-[520px] flex-col rounded-card border border-line bg-white shadow-card lg:min-h-0">
@@ -56,6 +76,14 @@ export function CanvasPane() {
             <span className="rounded-chip bg-brand-pale px-2 py-1 font-medium text-brand">
               {singleType}
             </span>
+            <button
+              onClick={() => duplicateNode(single)}
+              title="복제 (Ctrl/⌘+D)"
+              aria-label="복제"
+              className="rounded-chip px-2 py-1 text-ink2 hover:bg-line2"
+            >
+              복제
+            </button>
             <button
               onClick={() => removeNode(single)}
               className="rounded-chip px-2 py-1 text-error hover:bg-error/10"

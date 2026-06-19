@@ -72,6 +72,17 @@ const definitions: ComponentDef[] = [
     toCode: (_node, childrenCode) => `<Card>\n${childrenCode}\n</Card>`,
   },
   {
+    type: "Section",
+    label: "Section",
+    category: "레이아웃",
+    isContainer: true,
+    defaultSize: { w: 960, h: 200 },
+    defaultBackground: "#ffffff",
+    props: [],
+    render: (_props, children) => containerBox(children),
+    toCode: (_node, childrenCode) => `<Section>\n${childrenCode}\n</Section>`,
+  },
+  {
     type: "Sidebar",
     label: "Sidebar",
     category: "레이아웃",
@@ -113,6 +124,7 @@ const definitions: ComponentDef[] = [
     label: "Header",
     category: "레이아웃",
     isContainer: false,
+    hidden: true, // superseded by the composable "Header" block; kept for saved docs
     defaultSize: { w: 960, h: 64 },
     defaultBackground: "#ffffff",
     props: [
@@ -137,6 +149,7 @@ const definitions: ComponentDef[] = [
     label: "Hero",
     category: "레이아웃",
     isContainer: false,
+    hidden: true, // superseded by the composable "Hero" block; kept for saved docs
     defaultSize: { w: 960, h: 360 },
     defaultBackground: "#ecebfc",
     props: [
@@ -174,6 +187,7 @@ const definitions: ComponentDef[] = [
     label: "Footer",
     category: "레이아웃",
     isContainer: false,
+    hidden: true, // superseded by the composable "Footer" block; kept for saved docs
     defaultSize: { w: 960, h: 80 },
     defaultBackground: "#25252f",
     props: [{ key: "text", label: "텍스트", control: "text", default: "© BigValue" }],
@@ -218,19 +232,23 @@ const definitions: ComponentDef[] = [
       { key: "content", label: "내용", control: "text", default: "텍스트" },
       { key: "size", label: "크기", control: "select", options: ["sm", "base", "lg", "xl"], default: "base" },
       { key: "weight", label: "굵기", control: "select", options: ["normal", "medium", "semibold", "bold"], default: "normal" },
+      { key: "color", label: "색상", control: "color", default: "" },
     ],
     render: (props) => (
       <div
         className={`flex h-full w-full items-center ${
           TEXT_SIZE[s(props.size, "base")] ?? "text-base"
         } ${TEXT_WEIGHT[s(props.weight, "normal")] ?? "font-normal"} text-ink2`}
+        style={s(props.color) ? { color: s(props.color) } : undefined}
       >
         {s(props.content, "텍스트")}
       </div>
     ),
     toCode: (node) => {
       const cls = `${s(node.props.size, "base")} ${s(node.props.weight, "normal")}`;
-      return `<Text className="${cls.trim()}">${s(node.props.content, "텍스트")}</Text>`;
+      const color = s(node.props.color);
+      const style = color ? ` style={{ color: "${color}" }}` : "";
+      return `<Text className="${cls.trim()}"${style}>${s(node.props.content, "텍스트")}</Text>`;
     },
   },
   {
