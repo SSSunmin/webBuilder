@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { createNode, defaultFrameFor, getBlockDef, getComponentDef } from "../registry";
 import { toSides } from "../types/page";
-import type { NodeFrame, PageDocument, PageNode, Sides } from "../types/page";
+import type { BreakpointId, NodeFrame, PageDocument, PageNode, Sides } from "../types/page";
 
 const HISTORY_LIMIT = 50;
 
@@ -56,8 +56,11 @@ interface EditorState {
   past: PageDocument[];
   future: PageDocument[];
   lastTag: string | null;
+  /** Breakpoint currently being edited/previewed; desktop is the base. */
+  activeBreakpoint: BreakpointId;
 
   loadDocument: (doc: PageDocument) => void;
+  setBreakpoint: (bp: BreakpointId) => void;
   newDocument: (name: string) => PageDocument;
   selectNode: (id: string | null, additive?: boolean) => void;
   addNode: (
@@ -119,6 +122,21 @@ function sameParent(nodes: Record<string, PageNode>, ids: string[]): boolean {
   return true;
 }
 
+/** Deep-copy a node's per-breakpoint overrides so clones don't share nested objects. */
+function cloneOverrides(
+  overrides: NonNullable<PageNode["overrides"]>,
+): NonNullable<PageNode["overrides"]> {
+  const out: NonNullable<PageNode["overrides"]> = {};
+  for (const [bp, ov] of Object.entries(overrides)) {
+    if (!ov) continue;
+    out[bp as "tablet" | "mobile"] = {
+      ...ov,
+      ...(ov.frame ? { frame: { ...ov.frame } } : {}),
+    };
+  }
+  return out;
+}
+
 export function collectSubtree(nodes: Record<string, PageNode>, id: string, acc: string[] = []): string[] {
   acc.push(id);
   const node = nodes[id];
@@ -173,6 +191,9 @@ export const useEditorStore = create<EditorState>((set, get) => {
     past: [],
     future: [],
     lastTag: null,
+    activeBreakpoint: "desktop",
+
+    setBreakpoint: (bp) => set({ activeBreakpoint: bp }),
 
     loadDocument: (doc) =>
       set({
@@ -367,6 +388,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
           props: { ...n.props },
           ...(n.padding ? { padding: { ...n.padding } } : {}),
           ...(n.margin ? { margin: { ...n.margin } } : {}),
+          ...(n.overrides ? { overrides: cloneOverrides(n.overrides) } : {}),
         };
       }
       const newRootId = idMap.get(id)!;

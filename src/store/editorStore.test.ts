@@ -368,6 +368,48 @@ describe("undo / redo", () => {
   });
 });
 
+describe("activeBreakpoint", () => {
+  it("starts at desktop and switches via setBreakpoint", () => {
+    expect(store().activeBreakpoint).toBe("desktop");
+    store().setBreakpoint("mobile");
+    expect(store().activeBreakpoint).toBe("mobile");
+  });
+
+  it("does not change base frame editing (desktop stays the source of truth)", () => {
+    // Regression guard: switching breakpoint must not alter how frame edits work.
+    store().setBreakpoint("tablet");
+    const id = addAt(0, 0, 100, 40);
+    store().updateNodeFrame(id, { x: 30, w: 120 });
+    expect(store().document!.nodes[id].frame).toEqual({ x: 30, y: 0, w: 120, h: 40 });
+    expect(store().document!.nodes[id].overrides).toBeUndefined();
+  });
+});
+
+describe("duplicateNode overrides", () => {
+  it("deep-clones per-breakpoint overrides independently", () => {
+    const rootId = store().document!.rootId;
+    const a = store().addNode(rootId, "Card")!;
+    // Seed an override directly on the node (Stage A has no action for this yet).
+    useEditorStore.setState((s) => ({
+      document: {
+        ...s.document!,
+        nodes: {
+          ...s.document!.nodes,
+          [a]: { ...s.document!.nodes[a], overrides: { tablet: { frame: { w: 200 }, hidden: true } } },
+        },
+      },
+    }));
+
+    const dup = store().duplicateNode(a)!;
+    const copy = store().document!.nodes[dup];
+    expect(copy.overrides).toEqual({ tablet: { frame: { w: 200 }, hidden: true } });
+    // Mutating the clone's nested frame must not touch the original.
+    expect(copy.overrides!.tablet!.frame).not.toBe(
+      store().document!.nodes[a].overrides!.tablet!.frame,
+    );
+  });
+});
+
 describe("updateNodeSpacing", () => {
   it("merges per-side padding without dropping other sides", () => {
     const id = addAt(0, 0, 100, 40);
