@@ -1,13 +1,10 @@
 import { useMemo, useState } from "react";
 import { EXPORT_MODE_LABELS, generateMarkdown } from "../export";
 import type { ExportMode } from "../export";
+import { downloadFile, slugify } from "../lib/download";
 import { useEditorStore } from "../store/editorStore";
 
 const MODES: ExportMode[] = ["spec", "code", "both"];
-
-function slugify(name: string): string {
-  return name.trim().replace(/\s+/g, "-").replace(/[^\w가-힣-]/g, "") || "page";
-}
 
 export function ExportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const doc = useEditorStore((s) => s.document);
@@ -28,13 +25,11 @@ export function ExportModal({ open, onClose }: { open: boolean; onClose: () => v
   };
 
   const handleDownload = () => {
-    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${slugify(doc.meta.name)}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadFile(
+      `${slugify(doc.meta.name)}.md`,
+      markdown,
+      "text/markdown;charset=utf-8",
+    );
   };
 
   return (

@@ -1,9 +1,9 @@
 ---
 type: Reference
 title: 저장 계층 (StorageAdapter)
-description: StorageAdapter 인터페이스와 LocalStorageAdapter 구현체. localStorage 키 구조, save 시 updatedAt 갱신·썸네일 생성, quota fallback, duplicate 동작.
-resource: src/storage/StorageAdapter.ts, src/storage/LocalStorageAdapter.ts, src/storage/index.ts, src/thumbnail/generateThumbnail.ts
-tags: [storage, localStorage, adapter, persistence, thumbnail]
+description: StorageAdapter 인터페이스와 LocalStorageAdapter 구현체. localStorage 키 구조, save 시 updatedAt 갱신·썸네일 생성, quota fallback, duplicate, JSON import/export.
+resource: src/storage/StorageAdapter.ts, src/storage/LocalStorageAdapter.ts, src/storage/index.ts, src/storage/projectFile.ts, src/lib/download.ts, src/thumbnail/generateThumbnail.ts
+tags: [storage, localStorage, adapter, persistence, thumbnail, import-export]
 timestamp: 2026-06-22
 ---
 
@@ -95,7 +95,19 @@ Export는 `src/export/` 모듈 → `.md` 파일 다운로드.
 
 ## JSON import/export (프로젝트 파일 백업)
 
-`PageDocument` 전체를 JSON으로 import/export하는 기능이 계획되어 있으나 (PLAN.md 명시), 현재 코드에서 해당 UI 구현 위치는 (미확인) — ExportModal 또는 BuilderHeader에 존재할 수 있음.
+`PageDocument` 전체를 `.json`으로 백업/복원한다. MD Export(`src/export/`)와는 **별개** — 이쪽은 작업을 이어가기 위한 프로젝트 파일이다. 로직은 `src/storage/projectFile.ts` (순수), 다운로드 트리거는 `src/lib/download.ts`.
+
+```ts
+serializeProject(doc): string          // JSON.stringify(doc, null, 2)
+parseProject(raw): PageDocument        // 파싱 + 구조 검증, 실패 시 ProjectFileError throw
+prepareImport(doc): PageDocument       // 새 프로젝트 id 부여(+ version 고정)
+```
+
+- **Export**: `BuilderHeader`의 "JSON ↓" 버튼 → `downloadFile(slugify(name).json, serializeProject(doc), "application/json")`.
+- **Import**: `Home`의 "가져오기" 버튼 → 숨김 `<input type=file accept=.json>` → `parseProject(await file.text())` → `prepareImport()` → `storage.save()` → 에디터로 이동. 실패 시 `ProjectFileError` 메시지를 카드 상단에 표시(그 외 오류는 일반 안내).
+- **`parseProject` 검증 범위**: `rootId`(string)·`nodes`(object)·`meta.name`(string) 존재, `rootId ∈ nodes`, 그리고 **각 노드의 `type`(string)·`children`(array)**. 누락된 per-node `frame` 등은 로드 시 `editorStore.normalizeDocument`가 백필한다. 미등록 `type`은 캔버스에서 빈 렌더(`NodeView`가 `getComponentDef` 미스 시 null).
+- **`prepareImport`는 프로젝트 id만 교체**(노드 id는 유지) — 프로젝트가 각각 독립 localStorage 키에 저장되어 노드 id는 문서 내 유일성만 보장하면 되기 때문. 새 id 덕에 import가 기존 프로젝트를 **덮어쓰지 않는다**.
+- `downloadFile`은 별도 모듈 — `BuilderHeader`가 스토어 문서를 `document`로 받아 DOM `document`를 가리는 섀도잉 함정을 피한다. Firefox/Safari 호환을 위해 `<a>`를 body에 append 후 click, `revokeObjectURL`은 지연 호출.
 
 # 관련 개념
 

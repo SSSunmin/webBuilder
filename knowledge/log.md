@@ -2,6 +2,10 @@
 
 OKF 번들의 변경 이력. 최신 항목이 위. `/okf` 실행 시 knowledge-curator가 여기에 기록한다.
 
+## 2026-06-22 (프로젝트 JSON import/export)
+
+- `storage/storage-layer.md` "JSON import/export" 섹션을 stale 메모(미확인)에서 실제 구현으로 갱신: `src/storage/projectFile.ts`(serialize/parse·검증/prepareImport), `src/lib/download.ts`(slugify·downloadFile), BuilderHeader "JSON ↓" 내보내기, Home "가져오기" 흐름·검증 범위·id 정책 문서화. frontmatter resource/tags 갱신.
+
 ## 2026-06-22 (홈 카드 썸네일)
 
 - `storage/storage-layer.md` 갱신: `save()`가 `generateThumbnail(doc)`으로 SVG 썸네일을 생성해 문서·인덱스 양쪽에 저장, `QuotaExceededError` 시 썸네일 없이 재시도(private `persist`), `duplicate()`는 인덱스에서 완전한 meta를 읽어 반환. 신규 "썸네일 생성"(`src/thumbnail/generateThumbnail.ts`) 섹션 추가.
