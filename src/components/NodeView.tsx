@@ -5,7 +5,7 @@ import { getComponentDef } from "../registry";
 import { guideStore } from "../canvas/guideStore";
 import { domSnapContext, snapResize } from "../canvas/snap";
 import { useEditorStore } from "../store/editorStore";
-import { toSides } from "../types/page";
+import { BREAKPOINTS, resolveFrame, resolveHidden, toSides } from "../types/page";
 
 /** Recursively renders a node and its subtree on the canvas with absolute
  * positioning, wired for selection, drag-to-move, drop (containers), resize. */
@@ -18,6 +18,7 @@ export function NodeView({ nodeId }: { nodeId: string }) {
   );
   const selectNode = useEditorStore((s) => s.selectNode);
   const updateNodeFrame = useEditorStore((s) => s.updateNodeFrame);
+  const bp = useEditorStore((s) => s.activeBreakpoint);
 
   const def = node ? getComponentDef(node.type) : undefined;
   const isRoot = nodeId === rootId;
@@ -32,6 +33,10 @@ export function NodeView({ nodeId }: { nodeId: string }) {
     useDraggable({ id: `drag:${nodeId}`, data: { nodeId }, disabled: isRoot });
 
   if (!node || !def) return null;
+
+  // Resolve layout/visibility for the active breakpoint (desktop = base frame).
+  const frame = resolveFrame(node, bp);
+  const hidden = resolveHidden(node, bp);
 
   const pad = toSides(node.padding);
   const mar = toSides(node.margin);
@@ -51,8 +56,8 @@ export function NodeView({ nodeId }: { nodeId: string }) {
     e.preventDefault();
     const startX = e.clientX;
     const startY = e.clientY;
-    const startW = node.frame.w;
-    const startH = node.frame.h;
+    const startW = frame.w;
+    const startH = frame.h;
     const el = document.querySelector(`[data-node-id="${nodeId}"]`);
     const rect = el?.getBoundingClientRect();
     const { others, bounds } = domSnapContext(el);
@@ -60,8 +65,8 @@ export function NodeView({ nodeId }: { nodeId: string }) {
       const rawW = startW + (ev.clientX - startX);
       const rawH = startH + (ev.clientY - startY);
       const moving = {
-        x: rect?.left ?? node.frame.x,
-        y: rect?.top ?? node.frame.y,
+        x: rect?.left ?? frame.x,
+        y: rect?.top ?? frame.y,
         w: Math.max(20, rawW),
         h: Math.max(20, rawH),
       };
@@ -85,21 +90,26 @@ export function NodeView({ nodeId }: { nodeId: string }) {
     window.addEventListener("pointerup", onUp);
   };
 
+  // Non-desktop canvas narrows to the breakpoint's device width; height stays
+  // the resolved frame height. Desktop keeps the resolved (base) width.
+  const rootWidth =
+    bp === "desktop" ? frame.w : BREAKPOINTS.find((b) => b.id === bp)!.width;
+
   const base: CSSProperties = isRoot
     ? {
         position: "relative",
-        width: node.frame.w,
-        height: node.frame.h,
+        width: rootWidth,
+        height: frame.h,
         margin: "0 auto",
         background: node.background,
         borderRadius: node.borderRadius,
       }
     : {
         position: "absolute",
-        left: node.frame.x,
-        top: node.frame.y,
-        width: node.frame.w,
-        height: node.frame.h,
+        left: frame.x,
+        top: frame.y,
+        width: frame.w,
+        height: frame.h,
         background: node.background,
         borderRadius: node.borderRadius,
         transform: CSS.Translate.toString(transform),
@@ -129,12 +139,20 @@ export function NodeView({ nodeId }: { nodeId: string }) {
         isRoot ? "shadow-card" : "cursor-grab active:cursor-grabbing",
         "box-border transition-shadow",
         container && !isRoot ? "outline-dashed outline-1 outline-line" : "",
+        // Ghost a node hidden at this breakpoint: faint + dashed, but still
+        // selectable so it can be re-shown from the inspector.
+        hidden ? "opacity-40 outline-dashed outline-1 outline-muted" : "",
         selected ? "outline outline-2 outline-brand" : "",
         isOver && container ? "ring-2 ring-brand-light" : "",
         isDragging ? "opacity-80" : "",
       ].join(" ")}
     >
       {def.render(node.props, childEls)}
+      {hidden && (
+        <span className="pointer-events-none absolute -top-2 right-1 z-20 rounded-chip bg-ink px-1.5 py-0.5 text-[10px] font-medium text-white">
+          숨김
+        </span>
+      )}
       {onlySelected && container && hasPadding ? (
         <div
           className="pointer-events-none absolute border border-dashed border-brand-light"

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { storage } from "../storage";
 import { useEditorStore } from "../store/editorStore";
+import { BREAKPOINTS } from "../types/page";
 import { ExportModal } from "./ExportModal";
 import { PreviewModal } from "./PreviewModal";
 
@@ -16,6 +17,8 @@ const iconBtn =
 
 export function BuilderHeader({ projectId }: BuilderHeaderProps) {
   const document = useEditorStore((s) => s.document);
+  const activeBreakpoint = useEditorStore((s) => s.activeBreakpoint);
+  const setBreakpoint = useEditorStore((s) => s.setBreakpoint);
   const undo = useEditorStore((s) => s.undo);
   const redo = useEditorStore((s) => s.redo);
   const canUndo = useEditorStore((s) => s.past.length > 0);
@@ -48,6 +51,26 @@ export function BuilderHeader({ projectId }: BuilderHeaderProps) {
         </div>
       </div>
       <div className="flex items-center gap-2">
+        <div className="mr-1 flex items-center gap-0.5 rounded-button border border-line bg-line2/60 p-0.5">
+          {BREAKPOINTS.map((bp) => {
+            const active = bp.id === activeBreakpoint;
+            return (
+              <button
+                key={bp.id}
+                onClick={() => setBreakpoint(bp.id)}
+                title={`${bp.label} (${bp.width}px)`}
+                aria-pressed={active}
+                className={`h-8 rounded-button px-3 text-sm font-medium transition ${
+                  active
+                    ? "bg-brand text-white shadow-card"
+                    : "text-muted hover:bg-white hover:text-ink2"
+                }`}
+              >
+                {bp.label}
+              </button>
+            );
+          })}
+        </div>
         <button
           onClick={undo}
           disabled={!canUndo}
