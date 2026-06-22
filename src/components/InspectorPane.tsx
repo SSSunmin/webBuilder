@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { getComponentDef } from "../registry";
 import { useEditorStore } from "../store/editorStore";
 import type { PropSchema } from "../types/component";
-import { toSides } from "../types/page";
+import { BREAKPOINTS, resolveFrame, resolveHidden, toSides } from "../types/page";
 import type { NodeFrame, Sides } from "../types/page";
 
 const SIDES: { key: keyof Sides; label: string }[] = [
@@ -169,8 +169,17 @@ export function InspectorPane() {
   const setNodeBackground = useEditorStore((s) => s.setNodeBackground);
   const setNodeRadius = useEditorStore((s) => s.setNodeRadius);
   const updateNodeSpacing = useEditorStore((s) => s.updateNodeSpacing);
+  const bp = useEditorStore((s) => s.activeBreakpoint);
+  const setNodeHidden = useEditorStore((s) => s.setNodeHidden);
+  const resetOverride = useEditorStore((s) => s.resetOverride);
 
   const def = node ? getComponentDef(node.type) : undefined;
+
+  // Show resolved frame for the active breakpoint; editing stays bp-aware via the store.
+  const frame = node ? resolveFrame(node, bp) : null;
+  const bpLabel = BREAKPOINTS.find((b) => b.id === bp)?.label ?? bp;
+  const isCustomBp = bp !== "desktop";
+  const hasOverride = isCustomBp && node ? Boolean(node.overrides?.[bp]) : false;
 
   const setFrame = (key: keyof NodeFrame, v: number) =>
     selectedId && updateNodeFrame(selectedId, { [key]: v }, `frame:${selectedId}:${key}`);
@@ -196,15 +205,38 @@ export function InspectorPane() {
               <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                 위치 · 크기
               </p>
+              {isCustomBp && (
+                <div className="rounded-button border border-brand-light bg-brand-pale px-2.5 py-1.5 text-xs text-brand">
+                  📱 [{bpLabel}] 편집 중 — 변경은 이 브레이크포인트에만 적용됩니다.
+                </div>
+              )}
+              {isCustomBp && hasOverride && (
+                <button
+                  onClick={() => resetOverride(selectedId, bp)}
+                  className="h-8 rounded-button border border-line px-2 text-xs font-medium text-muted hover:bg-line2"
+                >
+                  이 브레이크포인트 초기화
+                </button>
+              )}
+              {isCustomBp && !isRoot && (
+                <label className="flex items-center gap-2 text-sm text-ink2">
+                  <input
+                    type="checkbox"
+                    checked={resolveHidden(node, bp)}
+                    onChange={(e) => setNodeHidden(selectedId, bp, e.target.checked)}
+                  />
+                  이 화면에서 숨김
+                </label>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 {!isRoot && (
                   <>
-                    <FrameField label="X" value={node.frame.x} onChange={(v) => setFrame("x", v)} />
-                    <FrameField label="Y" value={node.frame.y} onChange={(v) => setFrame("y", v)} />
+                    <FrameField label="X" value={frame!.x} onChange={(v) => setFrame("x", v)} />
+                    <FrameField label="Y" value={frame!.y} onChange={(v) => setFrame("y", v)} />
                   </>
                 )}
-                <FrameField label="너비(W)" value={node.frame.w} onChange={(v) => setFrame("w", v)} />
-                <FrameField label="높이(H)" value={node.frame.h} onChange={(v) => setFrame("h", v)} />
+                <FrameField label="너비(W)" value={frame!.w} onChange={(v) => setFrame("w", v)} />
+                <FrameField label="높이(H)" value={frame!.h} onChange={(v) => setFrame("h", v)} />
               </div>
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-muted">배경색</span>

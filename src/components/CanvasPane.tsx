@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { collectSubtree, useEditorStore } from "../store/editorStore";
+import { BREAKPOINTS } from "../types/page";
 import { AlignToolbar } from "./AlignToolbar";
 import { NodeView } from "./NodeView";
 
@@ -10,6 +11,8 @@ export function CanvasPane() {
   const removeNode = useEditorStore((s) => s.removeNode);
   const duplicateNode = useEditorStore((s) => s.duplicateNode);
   const moveNodeBy = useEditorStore((s) => s.moveNodeBy);
+  const activeBreakpoint = useEditorStore((s) => s.activeBreakpoint);
+  const bpDef = BREAKPOINTS.find((b) => b.id === activeBreakpoint);
 
   const single = selectedIds.length === 1 ? selectedIds[0] : null;
   const singleType = useEditorStore((s) =>
@@ -68,7 +71,14 @@ export function CanvasPane() {
   return (
     <main className="flex min-h-[520px] flex-col rounded-card border border-line bg-white shadow-card lg:min-h-0">
       <div className="flex min-h-[44px] items-center justify-between gap-2 border-b border-line px-4 py-2">
-        <p className="text-sm font-semibold text-ink2">캔버스</p>
+        <p className="text-sm font-semibold text-ink2">
+          캔버스
+          {bpDef && (
+            <span className="ml-1 font-normal text-muted">
+              · {bpDef.label} {bpDef.width}px
+            </span>
+          )}
+        </p>
         {selectedIds.length >= 2 ? (
           <AlignToolbar />
         ) : single && single !== rootId ? (

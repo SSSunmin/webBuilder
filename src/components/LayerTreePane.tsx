@@ -11,6 +11,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useState } from "react";
 import { getComponentDef } from "../registry";
 import { useEditorStore } from "../store/editorStore";
+import { resolveHidden } from "../types/page";
 import type { PageNode } from "../types/page";
 
 type DropZone = "before" | "after" | "inside";
@@ -80,6 +81,7 @@ function TreeRow({
   const removeNode = useEditorStore((s) => s.removeNode);
   const duplicateNode = useEditorStore((s) => s.duplicateNode);
   const reorderNode = useEditorStore((s) => s.reorderNode);
+  const bp = useEditorStore((s) => s.activeBreakpoint);
   const isRoot = nodeId === rootId;
   const {
     attributes,
@@ -106,6 +108,7 @@ function TreeRow({
 
   if (!node) return null;
   const def = getComponentDef(node.type);
+  const hidden = resolveHidden(node, bp);
   // Show front-most (last in array) at the top, like design tools.
   const display = [...node.children].reverse();
   const intentZone = dropIntent?.overId === nodeId ? dropIntent.zone : null;
@@ -134,8 +137,14 @@ function TreeRow({
         {intentZone === "after" && (
           <span className="pointer-events-none absolute inset-x-1 bottom-0 h-0.5 rounded-full bg-brand" />
         )}
-        <span className="flex-1 truncate font-medium" {...dragHandleProps}>
-          {def?.label ?? node.type}
+        <span
+          className={`flex flex-1 items-center gap-1 truncate font-medium ${
+            hidden ? "text-muted opacity-60" : ""
+          }`}
+          {...dragHandleProps}
+        >
+          <span className="truncate">{def?.label ?? node.type}</span>
+          {hidden && <span className="shrink-0 text-[10px]">🚫 숨김</span>}
         </span>
         {!isRoot && (
           <>
