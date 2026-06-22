@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getBlockDef, getComponentDef, listBlocks } from "../registry";
+import { resolveFrame, resolveHidden } from "../types/page";
 import { useEditorStore } from "./editorStore";
 
 const store = () => useEditorStore.getState();
@@ -375,13 +376,112 @@ describe("activeBreakpoint", () => {
     expect(store().activeBreakpoint).toBe("mobile");
   });
 
-  it("does not change base frame editing (desktop stays the source of truth)", () => {
-    // Regression guard: switching breakpoint must not alter how frame edits work.
-    store().setBreakpoint("tablet");
+  it("does not change desktop base-frame editing (desktop stays the source of truth)", () => {
+    // Regression guard: on desktop, frame edits still write the base frame and
+    // never create overrides.
     const id = addAt(0, 0, 100, 40);
     store().updateNodeFrame(id, { x: 30, w: 120 });
     expect(store().document!.nodes[id].frame).toEqual({ x: 30, y: 0, w: 120, h: 40 });
     expect(store().document!.nodes[id].overrides).toBeUndefined();
+  });
+});
+
+describe("breakpoint-aware frame writes", () => {
+  describe("desktop regression", () => {
+    it("updateNodeFrame / moveNodeBy write the base frame and create no overrides", () => {
+      const id = addAt(0, 0, 100, 40);
+      store().updateNodeFrame(id, { w: 200 });
+      store().moveNodeBy(id, 10, 20, "move");
+      const node = store().document!.nodes[id];
+      expect(node.frame).toEqual({ x: 10, y: 20, w: 200, h: 40 });
+      expect(node.overrides).toBeUndefined();
+    });
+
+    it("alignNodes / distributeNodes write the base frame and create no overrides", () => {
+      const a = addAt(10, 0, 100, 40);
+      const b = addAt(50, 60, 100, 40);
+      const c = addAt(500, 200, 100, 40);
+      store().alignNodes([a, b, c], "left");
+      expect(store().document!.nodes[a].frame.x).toBe(10);
+      expect(store().document!.nodes[b].frame.x).toBe(10);
+      store().distributeNodes([a, b, c], "v");
+      for (const id of [a, b, c]) {
+        expect(store().document!.nodes[id].overrides).toBeUndefined();
+      }
+    });
+  });
+
+  describe("override recording at a breakpoint", () => {
+    it("updateNodeFrame writes overrides[bp].frame and leaves the base frame alone", () => {
+      const id = addAt(0, 0, 100, 40);
+      store().setBreakpoint("mobile");
+      store().updateNodeFrame(id, { w: 200 });
+      const node = store().document!.nodes[id];
+      expect(node.frame.w).toBe(100); // base unchanged
+      expect(node.overrides!.mobile!.frame!.w).toBe(200);
+      expect(resolveFrame(node, "mobile").w).toBe(200);
+      expect(resolveFrame(node, "desktop").w).toBe(100);
+    });
+
+    it("moveNodeBy moves from the resolved position into overrides[bp].frame", () => {
+      const id = addAt(0, 0, 100, 40);
+      store().setBreakpoint("mobile");
+      // Seed an existing mobile position so we can prove the move is resolved-based.
+      store().updateNodeFrame(id, { x: 50, y: 50 });
+      store().moveNodeBy(id, 10, 20, "move");
+      const node = store().document!.nodes[id];
+      expect(node.frame.x).toBe(0); // base x untouched
+      expect(node.frame.y).toBe(0);
+      expect(node.overrides!.mobile!.frame!.x).toBe(60); // 50 + 10
+      expect(node.overrides!.mobile!.frame!.y).toBe(70); // 50 + 20
+    });
+
+    it("alignNodes records only the changed axis as a sparse override", () => {
+      const a = addAt(10, 0, 100, 40);
+      const b = addAt(50, 60, 120, 40);
+      store().setBreakpoint("mobile");
+      store().alignNodes([a, b], "left");
+      const bNode = store().document!.nodes[b];
+      // Only x is overridden; w/h/y still inherit from base.
+      expect(bNode.overrides!.mobile!.frame).toEqual({ x: 10 });
+      expect(bNode.frame.x).toBe(50); // base x unchanged
+      expect(resolveFrame(bNode, "mobile")).toEqual({ x: 10, y: 60, w: 120, h: 40 });
+    });
+  });
+
+  describe("setNodeHidden / resetOverride", () => {
+    it("toggles hidden at a breakpoint and resetOverride restores inheritance", () => {
+      const id = addAt(0, 0, 100, 40);
+      store().setNodeHidden(id, "tablet", true);
+      let node = store().document!.nodes[id];
+      expect(resolveHidden(node, "tablet")).toBe(true);
+      expect(resolveHidden(node, "desktop")).toBe(false);
+
+      store().resetOverride(id, "tablet");
+      node = store().document!.nodes[id];
+      expect(resolveHidden(node, "tablet")).toBe(false);
+      expect(node.overrides?.tablet).toBeUndefined();
+    });
+
+    it("setNodeHidden preserves a sibling frame override; desktop is a no-op", () => {
+      const id = addAt(0, 0, 100, 40);
+      store().setBreakpoint("tablet");
+      store().updateNodeFrame(id, { w: 200 });
+      store().setNodeHidden(id, "tablet", true);
+      const node = store().document!.nodes[id];
+      expect(node.overrides!.tablet).toEqual({ frame: { w: 200 }, hidden: true });
+
+      store().setNodeHidden(id, "desktop", true); // no-op
+      expect(resolveHidden(store().document!.nodes[id], "desktop")).toBe(false);
+    });
+
+    it("resetOverride is a no-op on desktop", () => {
+      const id = addAt(0, 0, 100, 40);
+      store().setBreakpoint("tablet");
+      store().updateNodeFrame(id, { w: 200 });
+      store().resetOverride(id, "desktop");
+      expect(store().document!.nodes[id].overrides!.tablet!.frame!.w).toBe(200);
+    });
   });
 });
 

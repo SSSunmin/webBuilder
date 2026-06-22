@@ -1,7 +1,14 @@
 import { create } from "zustand";
 import { createNode, defaultFrameFor, getBlockDef, getComponentDef } from "../registry";
-import { toSides } from "../types/page";
-import type { BreakpointId, NodeFrame, PageDocument, PageNode, Sides } from "../types/page";
+import { resolveFrame, toSides } from "../types/page";
+import type {
+  BreakpointId,
+  NodeFrame,
+  NodeOverride,
+  PageDocument,
+  PageNode,
+  Sides,
+} from "../types/page";
 
 const HISTORY_LIMIT = 50;
 
@@ -95,6 +102,16 @@ interface EditorState {
   moveNodeAdjacent: (id: string, refId: string, side: "before" | "after") => void;
   alignNodes: (ids: string[], mode: AlignMode) => void;
   distributeNodes: (ids: string[], axis: "h" | "v") => void;
+  /**
+   * Set a node's per-breakpoint hidden flag. desktop is always visible, so a
+   * desktop call is a no-op. Recorded as one undo step.
+   */
+  setNodeHidden: (id: string, bp: BreakpointId, hidden: boolean) => void;
+  /**
+   * Drop a node's entire override for a breakpoint so it inherits from the
+   * cascade (parent breakpoint / base) again. desktop has no override → no-op.
+   */
+  resetOverride: (id: string, bp: BreakpointId) => void;
   undo: () => void;
   redo: () => void;
 }
@@ -137,6 +154,24 @@ function cloneOverrides(
   return out;
 }
 
+/**
+ * Write a partial frame onto a node at the active breakpoint.
+ * desktop edits merge into the base frame (identical to pre-Stage-B behavior);
+ * other breakpoints merge into overrides[bp].frame, keeping the override sparse
+ * and preserving sibling override fields (e.g. hidden).
+ */
+function writeFrame(node: PageNode, bp: BreakpointId, partial: Partial<NodeFrame>): PageNode {
+  if (bp === "desktop") return { ...node, frame: { ...node.frame, ...partial } };
+  const prev = node.overrides?.[bp];
+  return {
+    ...node,
+    overrides: {
+      ...node.overrides,
+      [bp]: { ...prev, frame: { ...prev?.frame, ...partial } },
+    },
+  };
+}
+
 export function collectSubtree(nodes: Record<string, PageNode>, id: string, acc: string[] = []): string[] {
   acc.push(id);
   const node = nodes[id];
@@ -172,14 +207,20 @@ export const useEditorStore = create<EditorState>((set, get) => {
     apply((d) => ({ ...d, nodes: { ...d.nodes, [id]: patch(d.nodes[id]) } }), tag);
   };
 
-  /** Apply frame changes to many nodes in one history step. */
-  const patchFrames = (frames: Record<string, NodeFrame>, tag: string | null) => {
+  /**
+   * Apply partial frame changes to many nodes in one history step, at the
+   * active breakpoint. On desktop each partial merges into the base frame
+   * (so passing only the changed axis matches the old full-frame behavior);
+   * on other breakpoints it merges into overrides[bp].frame.
+   */
+  const patchFrames = (frames: Record<string, Partial<NodeFrame>>, tag: string | null) => {
     const doc = get().document;
     if (!doc) return;
+    const bp = get().activeBreakpoint;
     apply((d) => {
       const nodes = { ...d.nodes };
-      for (const [id, frame] of Object.entries(frames)) {
-        if (nodes[id]) nodes[id] = { ...nodes[id], frame };
+      for (const [id, partial] of Object.entries(frames)) {
+        if (nodes[id]) nodes[id] = writeFrame(nodes[id], bp, partial);
       }
       return { ...d, nodes };
     }, tag);
@@ -202,11 +243,19 @@ export const useEditorStore = create<EditorState>((set, get) => {
         past: [],
         future: [],
         lastTag: null,
+        activeBreakpoint: "desktop",
       }),
 
     newDocument: (name) => {
       const doc = createDocument(name);
-      set({ document: doc, selectedIds: [], past: [], future: [], lastTag: null });
+      set({
+        document: doc,
+        selectedIds: [],
+        past: [],
+        future: [],
+        lastTag: null,
+        activeBreakpoint: "desktop",
+      });
       return doc;
     },
 
@@ -291,26 +340,32 @@ export const useEditorStore = create<EditorState>((set, get) => {
         `props:${id}:${Object.keys(partial).join(",")}`,
       ),
 
-    updateNodeFrame: (id, partial, tag) =>
+    updateNodeFrame: (id, partial, tag) => {
+      const bp = get().activeBreakpoint;
       patchNode(
         id,
-        (node) => ({ ...node, frame: { ...node.frame, ...partial } }),
+        (node) => writeFrame(node, bp, partial),
         tag ?? `frame:${id}:${Object.keys(partial).join(",")}`,
-      ),
+      );
+    },
 
-    moveNodeBy: (id, dx, dy, tag) =>
+    moveNodeBy: (id, dx, dy, tag) => {
+      const bp = get().activeBreakpoint;
       patchNode(
         id,
-        (node) => ({
-          ...node,
-          frame: {
-            ...node.frame,
-            x: Math.max(0, Math.round(node.frame.x + dx)),
-            y: Math.max(0, Math.round(node.frame.y + dy)),
-          },
-        }),
+        (node) => {
+          // Move relative to the resolved position at this breakpoint, not the
+          // base frame, so dragging a node that already has an override nudges
+          // from where it actually sits.
+          const cur = resolveFrame(node, bp);
+          return writeFrame(node, bp, {
+            x: Math.max(0, Math.round(cur.x + dx)),
+            y: Math.max(0, Math.round(cur.y + dy)),
+          });
+        },
         tag ?? null,
-      ),
+      );
+    },
 
     setNodeBackground: (id, background) =>
       patchNode(id, (node) => ({ ...node, background }), `bg:${id}`),
@@ -507,25 +562,28 @@ export const useEditorStore = create<EditorState>((set, get) => {
       // otherwise we'd treat unrelated coordinate planes as one and fling nodes
       // outside their containers.
       if (!sameParent(doc.nodes, ids)) return;
-      const frames = ids.map((id) => doc.nodes[id]?.frame).filter(Boolean) as NodeFrame[];
+      const bp = get().activeBreakpoint;
+      const frames = ids
+        .filter((id) => doc.nodes[id])
+        .map((id) => resolveFrame(doc.nodes[id], bp));
       const minX = Math.min(...frames.map((f) => f.x));
       const maxR = Math.max(...frames.map((f) => f.x + f.w));
       const minY = Math.min(...frames.map((f) => f.y));
       const maxB = Math.max(...frames.map((f) => f.y + f.h));
       const cx = (minX + maxR) / 2;
       const cy = (minY + maxB) / 2;
-      const next: Record<string, NodeFrame> = {};
+      // Record only the changed axis so the override stays sparse and the
+      // unchanged axis keeps inheriting.
+      const next: Record<string, Partial<NodeFrame>> = {};
       for (const id of ids) {
-        const f = doc.nodes[id]?.frame;
-        if (!f) continue;
-        const nf = { ...f };
-        if (mode === "left") nf.x = minX;
-        else if (mode === "right") nf.x = maxR - f.w;
-        else if (mode === "hcenter") nf.x = Math.round(cx - f.w / 2);
-        else if (mode === "top") nf.y = minY;
-        else if (mode === "bottom") nf.y = maxB - f.h;
-        else if (mode === "vcenter") nf.y = Math.round(cy - f.h / 2);
-        next[id] = nf;
+        if (!doc.nodes[id]) continue;
+        const f = resolveFrame(doc.nodes[id], bp);
+        if (mode === "left") next[id] = { x: minX };
+        else if (mode === "right") next[id] = { x: maxR - f.w };
+        else if (mode === "hcenter") next[id] = { x: Math.round(cx - f.w / 2) };
+        else if (mode === "top") next[id] = { y: minY };
+        else if (mode === "bottom") next[id] = { y: maxB - f.h };
+        else if (mode === "vcenter") next[id] = { y: Math.round(cy - f.h / 2) };
       }
       patchFrames(next, null);
     },
@@ -535,9 +593,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
       if (!doc || ids.length < 3) return;
       // Same parent-relative coordinate guard as alignNodes.
       if (!sameParent(doc.nodes, ids)) return;
+      const bp = get().activeBreakpoint;
       const items = ids
-        .map((id) => ({ id, f: doc.nodes[id]?.frame }))
-        .filter((x): x is { id: string; f: NodeFrame } => Boolean(x.f));
+        .filter((id) => doc.nodes[id])
+        .map((id) => ({ id, f: resolveFrame(doc.nodes[id], bp) }));
       if (items.length < 3) return;
       const center = (f: NodeFrame) => (axis === "h" ? f.x + f.w / 2 : f.y + f.h / 2);
       // Even out the centers between the first and last item (both stay put),
@@ -546,15 +605,47 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const firstC = center(items[0].f);
       const lastC = center(items[items.length - 1].f);
       const step = (lastC - firstC) / (items.length - 1);
-      const next: Record<string, NodeFrame> = {};
+      // Only the distribution axis changes; record it as a partial.
+      const next: Record<string, Partial<NodeFrame>> = {};
       items.forEach((it, i) => {
         const targetCenter = firstC + i * step;
-        const nf = { ...it.f };
-        if (axis === "h") nf.x = Math.round(targetCenter - it.f.w / 2);
-        else nf.y = Math.round(targetCenter - it.f.h / 2);
-        next[it.id] = nf;
+        next[it.id] =
+          axis === "h"
+            ? { x: Math.round(targetCenter - it.f.w / 2) }
+            : { y: Math.round(targetCenter - it.f.h / 2) };
       });
       patchFrames(next, null);
+    },
+
+    setNodeHidden: (id, bp, hidden) => {
+      if (bp === "desktop") return; // desktop is always visible
+      patchNode(
+        id,
+        (node) => {
+          const prev = node.overrides?.[bp];
+          return {
+            ...node,
+            overrides: { ...node.overrides, [bp]: { ...prev, hidden } },
+          };
+        },
+        `hidden:${id}:${bp}`,
+      );
+    },
+
+    resetOverride: (id, bp) => {
+      if (bp === "desktop") return; // no override to reset on the base
+      patchNode(
+        id,
+        (node) => {
+          if (!node.overrides?.[bp]) return node;
+          const overrides: Partial<Record<Exclude<BreakpointId, "desktop">, NodeOverride>> = {
+            ...node.overrides,
+          };
+          delete overrides[bp];
+          return { ...node, overrides };
+        },
+        `reset:${id}:${bp}`,
+      );
     },
 
     undo: () => {
