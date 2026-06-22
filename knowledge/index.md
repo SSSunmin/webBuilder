@@ -6,18 +6,39 @@
 
 ## 개념 목록 (Concepts)
 
-<!-- 아직 비어 있습니다. `/okf` 를 실행하면 knowledge-curator가 코드를 읽어
-     개요·DB·API 등 개념 문서를 생성하고 이 목록을 채웁니다.
+> 이 프로젝트는 **프론트엔드 전용** 노코드 페이지 빌더입니다. 자체 DB·백엔드 API가 없으므로 `database/` 개념은 없습니다. 저장은 브라우저 localStorage에만 영속됩니다.
 
-예시 구조:
 ### 개요
-- [프로젝트 개요](/overview/<project>.md) — 무엇을·왜·아키텍처
-### 데이터 (DB가 있는 프로젝트만)
-- [데이터 모델](/database/data-model.md) — 스키마·관계·인덱스
-- [ERD](/database/erd.md) — 엔티티 관계도(Mermaid)
-### API
-- [<리소스> API](/api/<resource>-api.md) — 엔드포인트
--->
+
+- [프로젝트 개요](/overview/project.md) — 무엇을·왜, 기술 스택, 폴더 구조, 저장 vs Export, 라우트
+
+### 아키텍처
+
+- [에디터 아키텍처 (5-zone)](/architecture/editor-architecture.md) — EditorShell 레이아웃, DnD 흐름, 스냅 시스템, 키보드 단축키
+
+### 데이터 모델
+
+- [PageDocument / PageNode](/data-model/page-node.md) — 저장 단위, 노드 트리, NodeFrame, Sides, NodeOverride, EventBinding, PropSchema
+
+### 스토어
+
+- [에디터 스토어 (Zustand)](/store/editor-store.md) — 상태 구조, 전체 액션, undo/redo coalescing, breakpoint 편집
+
+### 레지스트리
+
+- [컴포넌트 레지스트리](/registry/component-registry.md) — ComponentDef / BlockDef 구조, 등록된 컴포넌트·블록 전체 목록
+
+### Export
+
+- [MD Export 형식](/export/export-format.md) — spec/code/both 모드, 명세서·코드 생성 규칙, 이벤트·override 출력
+
+### 저장 계층
+
+- [저장 계층 (StorageAdapter)](/storage/storage-layer.md) — 인터페이스, LocalStorageAdapter, localStorage 키 구조
+
+### 반응형
+
+- [브레이크포인트 편집 모델](/responsive/breakpoints.md) — desktop 기준 + tablet/mobile override 캐스케이드, resolveFrame/resolveHidden
 
 ## 번들 규칙 (OKF)
 - **예약 파일**: `index.md`(이 파일, 목차), `log.md`(변경 이력). 그 외 모든 `.md`는 개념.
