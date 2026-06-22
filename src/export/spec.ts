@@ -1,6 +1,7 @@
 import { getComponentDef } from "../registry";
 import type { BreakpointId, PageDocument, PageNode, Sides } from "../types/page";
 import { BREAKPOINTS, resolveFrame, resolveHidden, toSides } from "../types/page";
+import { describeEvent } from "../types/events";
 
 /** Breakpoints (excluding desktop base) that carry overrides, in order. */
 const OVERRIDE_BREAKPOINTS = BREAKPOINTS.filter(
@@ -26,6 +27,13 @@ function overrideLines(node: PageNode, depth: number): string[] {
     }
   }
   return lines;
+}
+
+/** Event binding lines for a node, one indent level deeper than the node line. */
+function eventLines(node: PageNode, depth: number): string[] {
+  if (!node.events?.length) return [];
+  const indent = "  ".repeat(depth + 1);
+  return node.events.map((ev) => `${indent}- 이벤트: ${describeEvent(ev)}`);
 }
 
 /** Serialize a node's props (per its schema) into a "key: value" summary. */
@@ -87,7 +95,7 @@ function renderNode(
     node,
     isRoot,
   )}${summary ? ` — ${summary}` : ""}`;
-  const lines = [line, ...overrideLines(node, depth)];
+  const lines = [line, ...overrideLines(node, depth), ...eventLines(node, depth)];
   for (const childId of node.children) {
     lines.push(...renderNode(doc, childId, depth + 1, false, visited));
   }

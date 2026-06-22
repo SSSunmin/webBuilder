@@ -9,6 +9,7 @@ import type {
   PageNode,
   Sides,
 } from "../types/page";
+import type { EventBinding } from "../types/events";
 
 const HISTORY_LIMIT = 50;
 
@@ -82,6 +83,16 @@ interface EditorState {
     position?: { x: number; y: number },
   ) => string | null;
   updateNodeProps: (id: string, partial: Record<string, unknown>) => void;
+  /** Append a default event binding (click → 직접 설명) to a node. */
+  addNodeEvent: (id: string) => void;
+  /** Patch one of a node's event bindings by its id. */
+  updateNodeEvent: (
+    id: string,
+    eventId: string,
+    partial: Partial<Omit<EventBinding, "id">>,
+  ) => void;
+  /** Remove one of a node's event bindings by its id. */
+  removeNodeEvent: (id: string, eventId: string) => void;
   updateNodeFrame: (id: string, partial: Partial<NodeFrame>, tag?: string) => void;
   moveNodeBy: (id: string, dx: number, dy: number, tag?: string) => void;
   setNodeBackground: (id: string, background: string) => void;
@@ -340,6 +351,43 @@ export const useEditorStore = create<EditorState>((set, get) => {
         `props:${id}:${Object.keys(partial).join(",")}`,
       ),
 
+    // Adding/removing a binding is a discrete action (null tag → own undo step);
+    // editing a binding's fields coalesces by tag like updateNodeProps does.
+    addNodeEvent: (id) =>
+      patchNode(
+        id,
+        (node) => ({
+          ...node,
+          events: [
+            ...(node.events ?? []),
+            { id: crypto.randomUUID(), trigger: "click", action: "custom" },
+          ],
+        }),
+        null,
+      ),
+
+    updateNodeEvent: (id, eventId, partial) =>
+      patchNode(
+        id,
+        (node) => ({
+          ...node,
+          events: (node.events ?? []).map((ev) =>
+            ev.id === eventId ? { ...ev, ...partial } : ev,
+          ),
+        }),
+        `event:${id}:${eventId}:${Object.keys(partial).join(",")}`,
+      ),
+
+    removeNodeEvent: (id, eventId) =>
+      patchNode(
+        id,
+        (node) => ({
+          ...node,
+          events: (node.events ?? []).filter((ev) => ev.id !== eventId),
+        }),
+        null,
+      ),
+
     updateNodeFrame: (id, partial, tag) => {
       const bp = get().activeBreakpoint;
       patchNode(
@@ -444,6 +492,9 @@ export const useEditorStore = create<EditorState>((set, get) => {
           ...(n.padding ? { padding: { ...n.padding } } : {}),
           ...(n.margin ? { margin: { ...n.margin } } : {}),
           ...(n.overrides ? { overrides: cloneOverrides(n.overrides) } : {}),
+          ...(n.events
+            ? { events: n.events.map((e) => ({ ...e, id: crypto.randomUUID() })) }
+            : {}),
         };
       }
       const newRootId = idMap.get(id)!;

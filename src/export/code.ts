@@ -1,6 +1,7 @@
 import { getComponentDef } from "../registry";
 import type { PageDocument, PageNode, Sides } from "../types/page";
 import { toSides } from "../types/page";
+import { TRIGGER_PROP, actionBody, actionNeedsEvent } from "../types/events";
 
 function indentBlock(code: string, spaces: number): string {
   const pad = " ".repeat(spaces);
@@ -44,6 +45,28 @@ function frameStyle(node: PageNode, isRoot: boolean): string {
   return `{{ ${parts.join(", ")} }}`;
 }
 
+/**
+ * Event-handler attributes for a node, e.g. ` onClick={() => { ... }}`.
+ * Bindings that share a trigger are merged into one handler (run in order).
+ */
+function eventAttrs(node: PageNode): string {
+  if (!node.events?.length) return "";
+  const groups = new Map<string, { bodies: string[]; needsEvent: boolean }>();
+  for (const ev of node.events) {
+    const prop = TRIGGER_PROP[ev.trigger];
+    const g = groups.get(prop) ?? { bodies: [], needsEvent: false };
+    g.bodies.push(actionBody(ev));
+    // Only pass the event arg when some action in the group declares it needs one.
+    g.needsEvent = g.needsEvent || actionNeedsEvent(ev.action);
+    groups.set(prop, g);
+  }
+  const attrs: string[] = [];
+  for (const [prop, g] of groups) {
+    attrs.push(` ${prop}={(${g.needsEvent ? "e" : ""}) => { ${g.bodies.join(" ")} }}`);
+  }
+  return attrs.join("");
+}
+
 /** Collect PascalCase JSX tags from generated body for the import header. */
 function collectComponents(body: string): string[] {
   const names = new Set<string>();
@@ -74,7 +97,7 @@ function renderNode(
   const childrenBlock = childCodes.join("\n");
   const inner = def.toCode(node, indentBlock(childrenBlock, 2));
 
-  return `<div style=${frameStyle(node, isRoot)}>\n${indentBlock(inner, 2)}\n</div>`;
+  return `<div style=${frameStyle(node, isRoot)}${eventAttrs(node)}>\n${indentBlock(inner, 2)}\n</div>`;
 }
 
 /** Generate a React + TS component string for the page. */

@@ -4,6 +4,8 @@ import { useEditorStore } from "../store/editorStore";
 import type { PropSchema } from "../types/component";
 import { BREAKPOINTS, resolveFrame, resolveHidden, toSides } from "../types/page";
 import type { NodeFrame, Sides } from "../types/page";
+import { ACTION_TYPES, EVENT_TRIGGERS } from "../types/events";
+import type { ActionType, EventBinding, EventTrigger } from "../types/events";
 
 const SIDES: { key: keyof Sides; label: string }[] = [
   { key: "top", label: "상" },
@@ -133,6 +135,60 @@ function PropField({
   );
 }
 
+function EventRow({
+  ev,
+  onChange,
+  onRemove,
+}: {
+  ev: EventBinding;
+  onChange: (partial: Partial<Omit<EventBinding, "id">>) => void;
+  onRemove: () => void;
+}) {
+  const targetLabel = ACTION_TYPES.find((a) => a.id === ev.action)?.targetLabel ?? "값";
+  return (
+    <div className="flex flex-col gap-1.5 rounded-button border border-line p-2">
+      <div className="flex items-center gap-1.5">
+        <select
+          className={inputCls}
+          value={ev.trigger}
+          onChange={(e) => onChange({ trigger: e.target.value as EventTrigger })}
+        >
+          {EVENT_TRIGGERS.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        <select
+          className={inputCls}
+          value={ev.action}
+          onChange={(e) => onChange({ action: e.target.value as ActionType })}
+        >
+          {ACTION_TYPES.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.label}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={onRemove}
+          title="이벤트 삭제"
+          className="h-9 shrink-0 rounded-button border border-line px-2 text-xs text-muted hover:bg-line2"
+        >
+          ✕
+        </button>
+      </div>
+      <input
+        type="text"
+        placeholder={targetLabel}
+        className={inputCls}
+        value={ev.target ?? ""}
+        onChange={(e) => onChange({ target: e.target.value })}
+      />
+    </div>
+  );
+}
+
 function FrameField({
   label,
   value,
@@ -165,6 +221,9 @@ export function InspectorPane() {
     (s) => s.selectedIds.length === 1 && s.document?.rootId === s.selectedIds[0],
   );
   const updateNodeProps = useEditorStore((s) => s.updateNodeProps);
+  const addNodeEvent = useEditorStore((s) => s.addNodeEvent);
+  const updateNodeEvent = useEditorStore((s) => s.updateNodeEvent);
+  const removeNodeEvent = useEditorStore((s) => s.removeNodeEvent);
   const updateNodeFrame = useEditorStore((s) => s.updateNodeFrame);
   const setNodeBackground = useEditorStore((s) => s.setNodeBackground);
   const setNodeRadius = useEditorStore((s) => s.setNodeRadius);
@@ -309,6 +368,34 @@ export function InspectorPane() {
                 ))}
               </div>
             )}
+
+            <div className="flex flex-col gap-3 border-t border-line2 pt-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  이벤트 · 액션
+                </p>
+                <button
+                  onClick={() => addNodeEvent(selectedId)}
+                  className="h-7 rounded-button border border-line px-2 text-xs font-medium text-ink2 hover:bg-line2"
+                >
+                  + 추가
+                </button>
+              </div>
+              {(node.events ?? []).length === 0 ? (
+                <p className="text-xs text-muted">
+                  클릭·제출 등에 동작을 연결합니다. Export 시 핸들러로 출력됩니다.
+                </p>
+              ) : (
+                (node.events ?? []).map((ev) => (
+                  <EventRow
+                    key={ev.id}
+                    ev={ev}
+                    onChange={(partial) => updateNodeEvent(selectedId, ev.id, partial)}
+                    onRemove={() => removeNodeEvent(selectedId, ev.id)}
+                  />
+                ))
+              )}
+            </div>
           </div>
         )}
       </div>
