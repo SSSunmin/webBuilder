@@ -320,14 +320,14 @@ describe("Button icon & hover export", () => {
 });
 
 describe("boxShadow export", () => {
-  it("emits the resolved CSS box-shadow for the node's preset", () => {
+  it("emits a CSS box-shadow built from the node's pixel shadow spec", () => {
     const store = useEditorStore.getState();
     const doc = store.newDocument("Shadow");
     const id = useEditorStore.getState().addNode(doc.rootId, "Card")!;
-    useEditorStore.getState().setNodeShadow(id, "md");
+    useEditorStore.getState().updateNodeShadow(id, {}); // default: 0,4,12,0 #000 0.15
     const code = generateCode(useEditorStore.getState().document!);
     expect(code).toContain("boxShadow:");
-    expect(code).toContain("0 4px 6px -1px");
+    expect(code).toContain("0px 4px 12px 0px rgba(0, 0, 0, 0.15)");
   });
 
   it("omits boxShadow when none is set", () => {

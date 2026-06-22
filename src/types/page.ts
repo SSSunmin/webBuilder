@@ -43,22 +43,48 @@ export const BREAKPOINTS: BreakpointDef[] = [
   { id: "mobile", label: "모바일", width: 375 },
 ];
 
-/** Drop-shadow presets (CSS box-shadow values), keyed by PageNode.boxShadow. */
-export const BOX_SHADOWS: Record<string, string> = {
-  sm: "0 1px 2px 0 rgb(0 0 0 / 0.08)",
-  md: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-  lg: "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
-  xl: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+/** Pixel-level drop shadow. Maps 1:1 to a CSS box-shadow's parameters. */
+export interface ShadowSpec {
+  /** Horizontal offset (px). */
+  x: number;
+  /** Vertical offset (px). */
+  y: number;
+  /** Blur radius (px, ≥ 0). */
+  blur: number;
+  /** Spread radius (px). */
+  spread: number;
+  /** Shadow color as a hex string (#rgb or #rrggbb). */
+  color: string;
+  /** Alpha 0–1 applied to the color. */
+  opacity: number;
+}
+
+/** Sensible starting shadow when a node first enables one. */
+export const DEFAULT_SHADOW: ShadowSpec = {
+  x: 0,
+  y: 4,
+  blur: 12,
+  spread: 0,
+  color: "#000000",
+  opacity: 0.15,
 };
 
-/** Shadow choices for the inspector select ("" = none). */
-export const SHADOW_OPTIONS: { key: string; label: string }[] = [
-  { key: "", label: "없음" },
-  { key: "sm", label: "약" },
-  { key: "md", label: "보통" },
-  { key: "lg", label: "강" },
-  { key: "xl", label: "매우 강" },
-];
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  let h = hex.trim().replace(/^#/, "");
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  if (h.length === 8) h = h.slice(0, 6); // #rrggbbaa → drop alpha (opacity handles it)
+  const n = Number.parseInt(h, 16);
+  if (h.length !== 6 || Number.isNaN(n)) return { r: 0, g: 0, b: 0 };
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+/** Build the CSS box-shadow value for a spec, or undefined when absent. */
+export function shadowCss(spec: ShadowSpec | undefined): string | undefined {
+  if (!spec) return undefined;
+  const { r, g, b } = hexToRgb(spec.color || "#000000");
+  const a = Math.max(0, Math.min(1, spec.opacity));
+  return `${spec.x}px ${spec.y}px ${Math.max(0, spec.blur)}px ${spec.spread}px rgba(${r}, ${g}, ${b}, ${a})`;
+}
 
 /** Per-breakpoint override of a node's layout. Only the changed fields are kept. */
 export interface NodeOverride {
@@ -78,8 +104,8 @@ export interface PageNode {
   /** Corner radius (px). Applied to the node box so the background and
    * border follow the same rounded corners. */
   borderRadius?: number;
-  /** Drop-shadow preset key (see BOX_SHADOWS); empty/undefined = none. */
-  boxShadow?: string;
+  /** Pixel-level drop shadow; undefined = none. */
+  boxShadow?: ShadowSpec;
   /** Inner padding (per side) — children snap to the padded inner area. */
   padding?: Sides;
   /** Outer margin (per side) — siblings keep this gap when snapping. */

@@ -70,7 +70,11 @@ function frameSummary(node: PageNode, isRoot: boolean): string {
   const pos = isRoot ? size : `@(${f.x},${f.y}) ${size}`;
   const parts = [node.background ? `${pos}, bg ${node.background}` : pos];
   if (node.borderRadius) parts.push(`radius ${node.borderRadius}`);
-  if (node.boxShadow) parts.push(`shadow ${node.boxShadow}`);
+  if (node.boxShadow) {
+    const sh = node.boxShadow;
+    const pct = Math.round(Math.max(0, Math.min(1, sh.opacity)) * 100); // match shadowCss clamp
+    parts.push(`shadow ${sh.x}/${sh.y}/${sh.blur}/${sh.spread} ${sh.color} ${pct}%`);
+  }
   const pad = spacingSummary(toSides(node.padding));
   if (pad !== null) parts.push(`pad ${pad}`);
   const margin = spacingSummary(toSides(node.margin));

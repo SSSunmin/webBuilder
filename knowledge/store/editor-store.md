@@ -83,7 +83,8 @@ tag === null     →  항상 새 스냅샷 (이산적 액션)
 | `moveNodeBy(id, dx, dy, tag?)` | null (기본) | 활성 bp 기준 resolve 후 이동 |
 | `setNodeBackground(id, bg)` | `bg:<id>` | background 색상 |
 | `setNodeRadius(id, r)` | `radius:<id>` | borderRadius (0 이상 정수로 클램프) |
-| `setNodeShadow(id, key)` | `shadow:<id>` | boxShadow 프리셋 키 ("" → undefined 저장) |
+| `updateNodeShadow(id, partial)` | `shadow:<id>` | 픽셀 그림자(ShadowSpec) 부분 병합 (없으면 DEFAULT_SHADOW 생성) |
+| `clearNodeShadow(id)` | null | 그림자 제거 (boxShadow → undefined) |
 | `updateNodeSpacing(id, {padding?, margin?})` | `spacing:...` | padding/margin 부분 업데이트 |
 
 ### 이벤트 바인딩

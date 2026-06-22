@@ -5,7 +5,7 @@ import { getComponentDef } from "../registry";
 import { guideStore } from "../canvas/guideStore";
 import { domSnapContext, snapResize } from "../canvas/snap";
 import { useEditorStore } from "../store/editorStore";
-import { BOX_SHADOWS, BREAKPOINTS, resolveFrame, resolveHidden, toSides } from "../types/page";
+import { BREAKPOINTS, resolveFrame, resolveHidden, shadowCss, toSides } from "../types/page";
 
 /** Recursively renders a node and its subtree on the canvas with absolute
  * positioning, wired for selection, drag-to-move, drop (containers), resize. */
@@ -95,7 +95,7 @@ export function NodeView({ nodeId }: { nodeId: string }) {
   const rootWidth =
     bp === "desktop" ? frame.w : BREAKPOINTS.find((b) => b.id === bp)!.width;
 
-  const boxShadow = node.boxShadow ? BOX_SHADOWS[node.boxShadow] : undefined;
+  const boxShadow = shadowCss(node.boxShadow);
 
   const base: CSSProperties = isRoot
     ? {

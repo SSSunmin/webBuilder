@@ -576,12 +576,22 @@ describe("updateNodeSpacing", () => {
   });
 });
 
-describe("setNodeShadow", () => {
-  it("stores the preset key and clears it with an empty string", () => {
+describe("node shadow", () => {
+  it("creates a default shadow then merges partial updates", () => {
     const id = addAt(0, 0, 100, 40);
-    store().setNodeShadow(id, "lg");
-    expect(store().document!.nodes[id].boxShadow).toBe("lg");
-    store().setNodeShadow(id, "");
+    store().updateNodeShadow(id, {});
+    expect(store().document!.nodes[id].boxShadow).toMatchObject({ y: 4, blur: 12 });
+    store().updateNodeShadow(id, { y: 10, opacity: 0.5 });
+    const sh = store().document!.nodes[id].boxShadow!;
+    expect(sh.y).toBe(10);
+    expect(sh.opacity).toBe(0.5);
+    expect(sh.blur).toBe(12); // untouched fields keep their value
+  });
+
+  it("clearNodeShadow removes the shadow", () => {
+    const id = addAt(0, 0, 100, 40);
+    store().updateNodeShadow(id, { blur: 20 });
+    store().clearNodeShadow(id);
     expect(store().document!.nodes[id].boxShadow).toBeUndefined();
   });
 });

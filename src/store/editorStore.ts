@@ -1,12 +1,13 @@
 import { create } from "zustand";
 import { createNode, defaultFrameFor, getBlockDef, getComponentDef } from "../registry";
-import { resolveFrame, toSides } from "../types/page";
+import { DEFAULT_SHADOW, resolveFrame, toSides } from "../types/page";
 import type {
   BreakpointId,
   NodeFrame,
   NodeOverride,
   PageDocument,
   PageNode,
+  ShadowSpec,
   Sides,
 } from "../types/page";
 import type { EventBinding } from "../types/events";
@@ -51,6 +52,11 @@ function normalizeDocument(doc: PageDocument): PageDocument {
     // canvas keeps matching each component's default rounded corners.
     if (next.borderRadius === undefined && def?.defaultBorderRadius !== undefined) {
       next = { ...next, borderRadius: def.defaultBorderRadius };
+    }
+    // Drop a legacy/invalid shadow value (pre pixel-level ShadowSpec format, or
+    // a null from external JSON) so only a ShadowSpec object or undefined remain.
+    if (next.boxShadow != null && typeof (next.boxShadow as unknown) !== "object") {
+      next = { ...next, boxShadow: undefined };
     }
     if (next !== node) changed = true;
     nodes[id] = next;
@@ -97,7 +103,10 @@ interface EditorState {
   moveNodeBy: (id: string, dx: number, dy: number, tag?: string) => void;
   setNodeBackground: (id: string, background: string) => void;
   setNodeRadius: (id: string, borderRadius: number) => void;
-  setNodeShadow: (id: string, boxShadow: string) => void;
+  /** Merge a partial pixel shadow into the node (creates a default if none). */
+  updateNodeShadow: (id: string, partial: Partial<ShadowSpec>) => void;
+  /** Remove a node's shadow entirely. */
+  clearNodeShadow: (id: string) => void;
   updateNodeSpacing: (
     id: string,
     partial: { padding?: Partial<Sides>; margin?: Partial<Sides> },
@@ -450,9 +459,17 @@ export const useEditorStore = create<EditorState>((set, get) => {
         `radius:${id}`,
       ),
 
-    setNodeShadow: (id, boxShadow) =>
-      // Store undefined (not "") for "none" so the optional field stays absent.
-      patchNode(id, (node) => ({ ...node, boxShadow: boxShadow || undefined }), `shadow:${id}`),
+    updateNodeShadow: (id, partial) =>
+      patchNode(
+        id,
+        (node) => ({ ...node, boxShadow: { ...(node.boxShadow ?? DEFAULT_SHADOW), ...partial } }),
+        // Per-field tag so dragging X then Y then blur are separate undo steps
+        // (enabling the shadow uses {} → "shadow:<id>:", its own step).
+        `shadow:${id}:${Object.keys(partial).join(",")}`,
+      ),
+
+    clearNodeShadow: (id) =>
+      patchNode(id, (node) => ({ ...node, boxShadow: undefined }), null),
 
     updateNodeSpacing: (id, partial) => {
       const tag =
@@ -520,6 +537,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
           props: { ...n.props },
           ...(n.padding ? { padding: { ...n.padding } } : {}),
           ...(n.margin ? { margin: { ...n.margin } } : {}),
+          ...(n.boxShadow ? { boxShadow: { ...n.boxShadow } } : {}),
           ...(n.overrides ? { overrides: cloneOverrides(n.overrides) } : {}),
           ...(n.events
             ? { events: n.events.map((e) => ({ ...e, id: crypto.randomUUID() })) }
