@@ -1,8 +1,15 @@
 import type { ReactNode } from "react";
 import { getComponentDef } from "../registry";
+import { iconDefs } from "../registry/icons";
 import { useEditorStore } from "../store/editorStore";
 import type { PropSchema } from "../types/component";
-import { BREAKPOINTS, resolveFrame, resolveHidden, toSides } from "../types/page";
+import {
+  BREAKPOINTS,
+  SHADOW_OPTIONS,
+  resolveFrame,
+  resolveHidden,
+  toSides,
+} from "../types/page";
 import type { NodeFrame, Sides } from "../types/page";
 import { ACTION_TYPES, EVENT_TRIGGERS } from "../types/events";
 import type { ActionType, EventBinding, EventTrigger } from "../types/events";
@@ -46,6 +53,48 @@ function SidesField({
 
 const inputCls =
   "h-9 w-full rounded-button border border-line px-2 text-sm focus:border-brand focus:outline-none";
+
+/** Visual grid picker for a component's icon prop ("" = no icon). */
+function IconPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const cell = (active: boolean) =>
+    `flex h-9 items-center justify-center rounded-button border ${
+      active ? "border-brand bg-brand-pale text-brand" : "border-line text-ink2 hover:bg-line2"
+    }`;
+  return (
+    <div className="grid grid-cols-6 gap-1">
+      <button type="button" title="없음" onClick={() => onChange("")} className={cell(!value)}>
+        <span className="text-xs">✕</span>
+      </button>
+      {iconDefs.map((ic) => (
+        <button
+          key={ic.name}
+          type="button"
+          title={ic.label}
+          onClick={() => onChange(ic.name)}
+          className={cell(value === ic.name)}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width={18}
+            height={18}
+            dangerouslySetInnerHTML={{ __html: ic.svg }}
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function PropField({
   schema,
@@ -115,6 +164,14 @@ function PropField({
             onChange={(e) => onChange(e.target.value)}
           />
         </div>
+      );
+      break;
+    case "icon":
+      control = (
+        <IconPicker
+          value={typeof value === "string" ? value : ""}
+          onChange={(v) => onChange(v)}
+        />
       );
       break;
     default:
@@ -227,6 +284,7 @@ export function InspectorPane() {
   const updateNodeFrame = useEditorStore((s) => s.updateNodeFrame);
   const setNodeBackground = useEditorStore((s) => s.setNodeBackground);
   const setNodeRadius = useEditorStore((s) => s.setNodeRadius);
+  const setNodeShadow = useEditorStore((s) => s.setNodeShadow);
   const updateNodeSpacing = useEditorStore((s) => s.updateNodeSpacing);
   const bp = useEditorStore((s) => s.activeBreakpoint);
   const setNodeHidden = useEditorStore((s) => s.setNodeHidden);
@@ -332,6 +390,20 @@ export function InspectorPane() {
                     setNodeRadius(selectedId, e.target.value === "" ? 0 : Number(e.target.value))
                   }
                 />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted">그림자</span>
+                <select
+                  className={inputCls}
+                  value={node.boxShadow ?? ""}
+                  onChange={(e) => setNodeShadow(selectedId, e.target.value)}
+                >
+                  {SHADOW_OPTIONS.map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
               </label>
               {def.isContainer && (
                 <SidesField

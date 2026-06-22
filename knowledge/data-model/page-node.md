@@ -55,6 +55,7 @@ interface PageNode {
   frame: NodeFrame;      // 부모 박스 기준 절대 좌표·크기
   background?: string;   // CSS 색상 문자열
   borderRadius?: number; // px
+  boxShadow?: string;    // 그림자 프리셋 키 (BOX_SHADOWS); 없음=undefined
   padding?: Sides;       // 내부 패딩 (children snap 기준)
   margin?: Sides;        // 외부 마진 (siblings snap 시 간격 확보)
   overrides?: Partial<Record<Exclude<BreakpointId, "desktop">, NodeOverride>>;
@@ -151,8 +152,8 @@ interface EventBinding {
 interface PropSchema {
   key: string;
   label: string;
-  control: "text" | "number" | "select" | "boolean" | "color";
-  options?: string[];  // select 전용
+  control: "text" | "number" | "select" | "boolean" | "color" | "icon";
+  options?: string[];  // select 전용 ("icon"은 icons.ts의 iconDefs 사용)
   default: unknown;
 }
 

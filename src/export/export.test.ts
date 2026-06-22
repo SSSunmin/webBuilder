@@ -291,6 +291,54 @@ describe("import header", () => {
   });
 });
 
+describe("Button icon & hover export", () => {
+  function buttonWith(props: Record<string, unknown>) {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Btn");
+    const id = useEditorStore.getState().addNode(doc.rootId, "Button")!;
+    useEditorStore.getState().updateNodeProps(id, props);
+    return generateCode(useEditorStore.getState().document!);
+  }
+
+  it("emits icon and iconSize props when an icon is set", () => {
+    const code = buttonWith({ icon: "search", iconSize: 20 });
+    expect(code).toContain('icon="search"');
+    expect(code).toContain("iconSize={20}");
+  });
+
+  it("omits icon props when no icon is selected", () => {
+    const code = buttonWith({ icon: "", iconSize: 16 });
+    expect(code).not.toContain("icon=");
+    expect(code).not.toContain("iconSize=");
+  });
+
+  it("emits hover color props when set", () => {
+    const code = buttonWith({ hoverBg: "#ff0000", hoverText: "#ffffff" });
+    expect(code).toContain('hoverBg="#ff0000"');
+    expect(code).toContain('hoverText="#ffffff"');
+  });
+});
+
+describe("boxShadow export", () => {
+  it("emits the resolved CSS box-shadow for the node's preset", () => {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Shadow");
+    const id = useEditorStore.getState().addNode(doc.rootId, "Card")!;
+    useEditorStore.getState().setNodeShadow(id, "md");
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain("boxShadow:");
+    expect(code).toContain("0 4px 6px -1px");
+  });
+
+  it("omits boxShadow when none is set", () => {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("NoShadow");
+    useEditorStore.getState().addNode(doc.rootId, "Card");
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).not.toContain("boxShadow:");
+  });
+});
+
 describe("cyclic children defense", () => {
   /** Build a document whose two nodes reference each other as children. */
   function cyclicDoc() {

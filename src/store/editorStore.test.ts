@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getBlockDef, getComponentDef, listBlocks } from "../registry";
 import { resolveFrame, resolveHidden } from "../types/page";
-import { useEditorStore } from "./editorStore";
+import { findParentChild, useEditorStore } from "./editorStore";
 
 const store = () => useEditorStore.getState();
 
@@ -573,5 +573,82 @@ describe("updateNodeSpacing", () => {
       bottom: 0,
       left: 12,
     });
+  });
+});
+
+describe("setNodeShadow", () => {
+  it("stores the preset key and clears it with an empty string", () => {
+    const id = addAt(0, 0, 100, 40);
+    store().setNodeShadow(id, "lg");
+    expect(store().document!.nodes[id].boxShadow).toBe("lg");
+    store().setNodeShadow(id, "");
+    expect(store().document!.nodes[id].boxShadow).toBeUndefined();
+  });
+});
+
+describe("findParentChild", () => {
+  /** Build a Card parent with one child Card; returns [parentId, childId]. */
+  const makeParentChild = (): [string, string] => {
+    const rootId = store().document!.rootId;
+    const parent = store().addNode(rootId, "Card")!;
+    store().updateNodeFrame(parent, { x: 0, y: 0, w: 400, h: 300 });
+    const child = store().addNode(parent, "Card")!;
+    store().updateNodeFrame(child, { x: 0, y: 0, w: 100, h: 80 });
+    return [parent, child];
+  };
+
+  it("detects a parent selected together with its direct child", () => {
+    const [parent, child] = makeParentChild();
+    expect(findParentChild(store().document!.nodes, [parent, child])).toEqual({
+      parentId: parent,
+      childIds: [child],
+    });
+  });
+
+  it("returns null for a siblings-only selection", () => {
+    const a = addAt(0, 0, 100, 40);
+    const b = addAt(120, 0, 100, 40);
+    expect(findParentChild(store().document!.nodes, [a, b])).toBeNull();
+  });
+
+  it("returns null when the other id is not a direct child", () => {
+    const [parent] = makeParentChild();
+    const sibling = addAt(0, 0, 50, 50); // child of root, not of parent
+    expect(findParentChild(store().document!.nodes, [parent, sibling])).toBeNull();
+  });
+});
+
+describe("centerInParent", () => {
+  const makeParentChild = (): [string, string] => {
+    const rootId = store().document!.rootId;
+    const parent = store().addNode(rootId, "Card")!;
+    store().updateNodeFrame(parent, { x: 0, y: 0, w: 400, h: 300 });
+    const child = store().addNode(parent, "Card")!;
+    store().updateNodeFrame(child, { x: 5, y: 7, w: 100, h: 80 });
+    return [parent, child];
+  };
+
+  it("centers a child horizontally within the parent box, leaving y untouched", () => {
+    const [parent, child] = makeParentChild();
+    store().centerInParent([parent, child], "h");
+    const f = store().document!.nodes[child].frame;
+    expect(f.x).toBe(150); // (400 - 100) / 2
+    expect(f.y).toBe(7);
+  });
+
+  it("centers a child vertically within the parent box, leaving x untouched", () => {
+    const [parent, child] = makeParentChild();
+    store().centerInParent([parent, child], "v");
+    const f = store().document!.nodes[child].frame;
+    expect(f.y).toBe(110); // (300 - 80) / 2
+    expect(f.x).toBe(5);
+  });
+
+  it("is a no-op when the selection is not a parent+child shape", () => {
+    const a = addAt(10, 10, 100, 40);
+    const b = addAt(200, 10, 100, 40);
+    store().centerInParent([a, b], "h");
+    expect(store().document!.nodes[a].frame.x).toBe(10);
+    expect(store().document!.nodes[b].frame.x).toBe(200);
   });
 });

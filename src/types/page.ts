@@ -43,6 +43,23 @@ export const BREAKPOINTS: BreakpointDef[] = [
   { id: "mobile", label: "모바일", width: 375 },
 ];
 
+/** Drop-shadow presets (CSS box-shadow values), keyed by PageNode.boxShadow. */
+export const BOX_SHADOWS: Record<string, string> = {
+  sm: "0 1px 2px 0 rgb(0 0 0 / 0.08)",
+  md: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+  lg: "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+  xl: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+};
+
+/** Shadow choices for the inspector select ("" = none). */
+export const SHADOW_OPTIONS: { key: string; label: string }[] = [
+  { key: "", label: "없음" },
+  { key: "sm", label: "약" },
+  { key: "md", label: "보통" },
+  { key: "lg", label: "강" },
+  { key: "xl", label: "매우 강" },
+];
+
 /** Per-breakpoint override of a node's layout. Only the changed fields are kept. */
 export interface NodeOverride {
   frame?: Partial<NodeFrame>;
@@ -61,6 +78,8 @@ export interface PageNode {
   /** Corner radius (px). Applied to the node box so the background and
    * border follow the same rounded corners. */
   borderRadius?: number;
+  /** Drop-shadow preset key (see BOX_SHADOWS); empty/undefined = none. */
+  boxShadow?: string;
   /** Inner padding (per side) — children snap to the padded inner area. */
   padding?: Sides;
   /** Outer margin (per side) — siblings keep this gap when snapping. */

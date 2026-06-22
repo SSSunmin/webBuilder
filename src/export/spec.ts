@@ -44,6 +44,8 @@ function summarizeProps(node: PageNode): string {
   for (const schema of def.props) {
     const value = node.props[schema.key];
     if (value === undefined || value === null || value === "") continue;
+    // iconSize is meaningless without an icon — skip the default-16 noise.
+    if (schema.key === "iconSize" && !node.props.icon) continue;
     parts.push(
       typeof value === "string"
         ? `${schema.key}: "${value}"`
@@ -68,6 +70,7 @@ function frameSummary(node: PageNode, isRoot: boolean): string {
   const pos = isRoot ? size : `@(${f.x},${f.y}) ${size}`;
   const parts = [node.background ? `${pos}, bg ${node.background}` : pos];
   if (node.borderRadius) parts.push(`radius ${node.borderRadius}`);
+  if (node.boxShadow) parts.push(`shadow ${node.boxShadow}`);
   const pad = spacingSummary(toSides(node.padding));
   if (pad !== null) parts.push(`pad ${pad}`);
   const margin = spacingSummary(toSides(node.margin));

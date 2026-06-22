@@ -97,6 +97,7 @@ interface EditorState {
   moveNodeBy: (id: string, dx: number, dy: number, tag?: string) => void;
   setNodeBackground: (id: string, background: string) => void;
   setNodeRadius: (id: string, borderRadius: number) => void;
+  setNodeShadow: (id: string, boxShadow: string) => void;
   updateNodeSpacing: (
     id: string,
     partial: { padding?: Partial<Sides>; margin?: Partial<Sides> },
@@ -113,6 +114,8 @@ interface EditorState {
   moveNodeAdjacent: (id: string, refId: string, side: "before" | "after") => void;
   alignNodes: (ids: string[], mode: AlignMode) => void;
   distributeNodes: (ids: string[], axis: "h" | "v") => void;
+  /** Center selected direct children within their (also-selected) parent box. */
+  centerInParent: (ids: string[], axis: "h" | "v") => void;
   /**
    * Set a node's per-breakpoint hidden flag. desktop is always visible, so a
    * desktop call is a no-op. Recorded as one undo step.
@@ -139,7 +142,7 @@ function findParentId(nodes: Record<string, PageNode>, childId: string): string 
  * ids missing from the document are ignored. Empty/single sets are trivially
  * same-parent. Used to keep parent-relative ops on one coordinate plane.
  */
-function sameParent(nodes: Record<string, PageNode>, ids: string[]): boolean {
+export function sameParent(nodes: Record<string, PageNode>, ids: string[]): boolean {
   let parent: string | null | undefined;
   for (const id of ids) {
     if (!nodes[id]) continue;
@@ -148,6 +151,28 @@ function sameParent(nodes: Record<string, PageNode>, ids: string[]): boolean {
     else if (parent !== p) return false;
   }
   return true;
+}
+
+/**
+ * Detect a "parent + its direct children" selection: exactly one of the ids is
+ * the direct parent of all the others. Returns the parent id and the child ids,
+ * or null when the selection isn't that shape (e.g. only siblings, or a
+ * non-direct ancestor). Used to center children within their parent box.
+ */
+export function findParentChild(
+  nodes: Record<string, PageNode>,
+  ids: string[],
+): { parentId: string; childIds: string[] } | null {
+  if (ids.length < 2) return null;
+  for (const pid of ids) {
+    const parent = nodes[pid];
+    if (!parent) continue;
+    const others = ids.filter((i) => i !== pid);
+    if (others.length && others.every((c) => parent.children.includes(c))) {
+      return { parentId: pid, childIds: others };
+    }
+  }
+  return null;
 }
 
 /** Deep-copy a node's per-breakpoint overrides so clones don't share nested objects. */
@@ -425,6 +450,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
         `radius:${id}`,
       ),
 
+    setNodeShadow: (id, boxShadow) =>
+      // Store undefined (not "") for "none" so the optional field stays absent.
+      patchNode(id, (node) => ({ ...node, boxShadow: boxShadow || undefined }), `shadow:${id}`),
+
     updateNodeSpacing: (id, partial) => {
       const tag =
         `spacing:${id}:` +
@@ -665,6 +694,28 @@ export const useEditorStore = create<EditorState>((set, get) => {
             ? { x: Math.round(targetCenter - it.f.w / 2) }
             : { y: Math.round(targetCenter - it.f.h / 2) };
       });
+      patchFrames(next, null);
+    },
+
+    centerInParent: (ids, axis) => {
+      const doc = get().document;
+      if (!doc) return;
+      const pc = findParentChild(doc.nodes, ids);
+      if (!pc) return;
+      const bp = get().activeBreakpoint;
+      // Child frames are parent-relative, so center within the parent's padded
+      // content box (children snap to that area). The other axis keeps
+      // inheriting (sparse override).
+      const pf = resolveFrame(doc.nodes[pc.parentId], bp);
+      const pad = toSides(doc.nodes[pc.parentId].padding);
+      const next: Record<string, Partial<NodeFrame>> = {};
+      for (const cid of pc.childIds) {
+        const cf = resolveFrame(doc.nodes[cid], bp);
+        next[cid] =
+          axis === "h"
+            ? { x: Math.round(pad.left + (pf.w - pad.left - pad.right - cf.w) / 2) }
+            : { y: Math.round(pad.top + (pf.h - pad.top - pad.bottom - cf.h) / 2) };
+      }
       patchFrames(next, null);
     },
 

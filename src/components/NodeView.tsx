@@ -5,7 +5,7 @@ import { getComponentDef } from "../registry";
 import { guideStore } from "../canvas/guideStore";
 import { domSnapContext, snapResize } from "../canvas/snap";
 import { useEditorStore } from "../store/editorStore";
-import { BREAKPOINTS, resolveFrame, resolveHidden, toSides } from "../types/page";
+import { BOX_SHADOWS, BREAKPOINTS, resolveFrame, resolveHidden, toSides } from "../types/page";
 
 /** Recursively renders a node and its subtree on the canvas with absolute
  * positioning, wired for selection, drag-to-move, drop (containers), resize. */
@@ -95,6 +95,8 @@ export function NodeView({ nodeId }: { nodeId: string }) {
   const rootWidth =
     bp === "desktop" ? frame.w : BREAKPOINTS.find((b) => b.id === bp)!.width;
 
+  const boxShadow = node.boxShadow ? BOX_SHADOWS[node.boxShadow] : undefined;
+
   const base: CSSProperties = isRoot
     ? {
         position: "relative",
@@ -103,6 +105,7 @@ export function NodeView({ nodeId }: { nodeId: string }) {
         margin: "0 auto",
         background: node.background,
         borderRadius: node.borderRadius,
+        boxShadow,
       }
     : {
         position: "absolute",
@@ -112,6 +115,7 @@ export function NodeView({ nodeId }: { nodeId: string }) {
         height: frame.h,
         background: node.background,
         borderRadius: node.borderRadius,
+        boxShadow,
         transform: CSS.Translate.toString(transform),
         zIndex: isDragging ? 1000 : selected ? 10 : undefined,
       };

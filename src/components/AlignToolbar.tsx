@@ -1,4 +1,4 @@
-import { useEditorStore } from "../store/editorStore";
+import { findParentChild, sameParent, useEditorStore } from "../store/editorStore";
 import type { AlignMode } from "../store/editorStore";
 
 const ALIGN: { mode: AlignMode; label: string; title: string }[] = [
@@ -15,11 +15,36 @@ const btn =
 
 export function AlignToolbar() {
   const selectedIds = useEditorStore((s) => s.selectedIds);
+  const nodes = useEditorStore((s) => s.document?.nodes);
   const alignNodes = useEditorStore((s) => s.alignNodes);
   const distributeNodes = useEditorStore((s) => s.distributeNodes);
+  const centerInParent = useEditorStore((s) => s.centerInParent);
 
   if (selectedIds.length < 2) return null;
-  const canDistribute = selectedIds.length >= 3;
+
+  // When a parent and its direct children are selected together, the sibling
+  // align/distribute tools don't apply (different coordinate planes); offer
+  // "center within parent" instead.
+  const parentChild = nodes ? findParentChild(nodes, selectedIds) : null;
+  if (parentChild) {
+    return (
+      <div className="flex items-center gap-1">
+        <span className="mr-1 text-xs text-muted">
+          부모 기준 ({parentChild.childIds.length})
+        </span>
+        <button title="부모 기준 가로 가운데" onClick={() => centerInParent(selectedIds, "h")} className={btn}>
+          ⤢
+        </button>
+        <button title="부모 기준 세로 가운데" onClick={() => centerInParent(selectedIds, "v")} className={btn}>
+          ⤡
+        </button>
+      </div>
+    );
+  }
+
+  // Align/distribute only make sense among siblings (one coordinate plane).
+  const canAlign = nodes ? sameParent(nodes, selectedIds) : false;
+  const canDistribute = canAlign && selectedIds.length >= 3;
 
   return (
     <div className="flex items-center gap-1">
@@ -28,6 +53,7 @@ export function AlignToolbar() {
         <button
           key={a.mode}
           title={a.title}
+          disabled={!canAlign}
           onClick={() => alignNodes(selectedIds, a.mode)}
           className={btn}
         >

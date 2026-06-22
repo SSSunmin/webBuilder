@@ -83,6 +83,7 @@ tag === null     →  항상 새 스냅샷 (이산적 액션)
 | `moveNodeBy(id, dx, dy, tag?)` | null (기본) | 활성 bp 기준 resolve 후 이동 |
 | `setNodeBackground(id, bg)` | `bg:<id>` | background 색상 |
 | `setNodeRadius(id, r)` | `radius:<id>` | borderRadius (0 이상 정수로 클램프) |
+| `setNodeShadow(id, key)` | `shadow:<id>` | boxShadow 프리셋 키 ("" → undefined 저장) |
 | `updateNodeSpacing(id, {padding?, margin?})` | `spacing:...` | padding/margin 부분 업데이트 |
 
 ### 이벤트 바인딩
@@ -110,6 +111,9 @@ tag === null     →  항상 새 스냅샷 (이산적 액션)
 |---|---|
 | `alignNodes(ids, mode)` | 동일 부모 노드들을 정렬 (left/hcenter/right/top/vcenter/bottom) |
 | `distributeNodes(ids, axis)` | 동일 부모 노드 3개 이상 등간격 배분 (h/v) |
+| `centerInParent(ids, axis)` | 부모+직속자식 선택 시 자식을 부모 **패딩 영역** 기준 가운데로 (h/v) |
+
+`findParentChild(nodes, ids)`·`sameParent(nodes, ids)`는 export된 순수 헬퍼다. AlignToolbar가 이걸로 선택 형태를 판별 — 부모+자식이면 `centerInParent` 버튼을, 동일 부모 형제면 align/distribute 버튼을 보이고(`!sameParent`면 비활성화) 한다.
 
 ### 브레이크포인트 오버라이드
 
