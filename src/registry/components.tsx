@@ -245,10 +245,12 @@ const definitions: ComponentDef[] = [
       </div>
     ),
     toCode: (node) => {
-      const cls = `${s(node.props.size, "base")} ${s(node.props.weight, "normal")}`;
       const color = s(node.props.color);
       const style = color ? ` style={{ color: "${color}" }}` : "";
-      return `<Text className="${cls.trim()}"${style}>${s(node.props.content, "텍스트")}</Text>`;
+      return `<Text${attr("size", node.props.size)}${attr(
+        "weight",
+        node.props.weight,
+      )}${style}>${s(node.props.content, "텍스트")}</Text>`;
     },
   },
   {

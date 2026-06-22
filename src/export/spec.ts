@@ -30,9 +30,13 @@ function renderNode(
   nodeId: string,
   depth: number,
   isRoot: boolean,
+  visited: Set<string> = new Set(),
 ): string[] {
+  // Guard against corrupted documents with cyclic children references.
+  if (visited.has(nodeId)) return [];
   const node = doc.nodes[nodeId];
   if (!node) return [];
+  visited.add(nodeId);
   const def = getComponentDef(node.type);
   const indent = "  ".repeat(depth);
   const kind = def?.isContainer ? " (container)" : "";
@@ -43,7 +47,7 @@ function renderNode(
   )}${summary ? ` — ${summary}` : ""}`;
   const lines = [line];
   for (const childId of node.children) {
-    lines.push(...renderNode(doc, childId, depth + 1, false));
+    lines.push(...renderNode(doc, childId, depth + 1, false, visited));
   }
   return lines;
 }

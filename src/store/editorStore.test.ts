@@ -46,6 +46,18 @@ describe("alignNodes", () => {
     store().alignNodes([a], "left");
     expect(store().document!.nodes[a].frame.x).toBe(10);
   });
+
+  it("is a no-op when nodes span different parents", () => {
+    const rootId = store().document!.rootId;
+    const card = store().addNode(rootId, "Card")!;
+    // `a` lives in root; `b` lives inside the card → different parents.
+    const a = addAt(10, 0, 100, 40);
+    const b = store().addNode(card, "Card")!;
+    store().updateNodeFrame(b, { x: 50, y: 60, w: 100, h: 40 });
+    store().alignNodes([a, b], "left");
+    expect(store().document!.nodes[a].frame.x).toBe(10);
+    expect(store().document!.nodes[b].frame.x).toBe(50);
+  });
 });
 
 describe("distributeNodes", () => {
@@ -81,6 +93,20 @@ describe("distributeNodes", () => {
     const b = addAt(300, 0, 40, 40);
     store().distributeNodes([a, b], "h");
     expect(store().document!.nodes[b].frame.x).toBe(300);
+  });
+
+  it("is a no-op when nodes span different parents", () => {
+    const rootId = store().document!.rootId;
+    const card = store().addNode(rootId, "Card")!;
+    const a = addAt(0, 0, 40, 40);
+    const c = addAt(400, 0, 40, 40);
+    // `b` lives in the card → different parent than `a`/`c`.
+    const b = store().addNode(card, "Card")!;
+    store().updateNodeFrame(b, { x: 200, y: 0, w: 200, h: 40 });
+    store().distributeNodes([a, b, c], "h");
+    expect(store().document!.nodes[a].frame.x).toBe(0);
+    expect(store().document!.nodes[b].frame.x).toBe(200);
+    expect(store().document!.nodes[c].frame.x).toBe(400);
   });
 });
 
@@ -319,6 +345,26 @@ describe("undo / redo", () => {
 
     store().redo();
     expect(store().document!.nodes[id].frame.x).toBe(30);
+  });
+
+  it("coalesces same-tag patches into one undo step", () => {
+    const id = addAt(0, 0, 100, 40);
+    const past0 = store().past.length;
+    store().updateNodeFrame(id, { w: 110 }, "resize");
+    store().updateNodeFrame(id, { w: 120 }, "resize");
+    // Same tag, no selection change in between → one snapshot.
+    expect(store().past.length).toBe(past0 + 1);
+  });
+
+  it("starts a new undo session when selection changes between same-tag patches", () => {
+    const a = addAt(0, 0, 100, 40);
+    const b = addAt(0, 0, 100, 40);
+    const past0 = store().past.length;
+    store().updateNodeFrame(a, { w: 110 }, "resize");
+    store().selectNode(b);
+    store().updateNodeFrame(a, { w: 120 }, "resize");
+    // selectNode resets lastTag → two separate snapshots despite the same tag.
+    expect(store().past.length).toBe(past0 + 2);
   });
 });
 

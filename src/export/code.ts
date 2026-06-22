@@ -28,14 +28,22 @@ function frameStyle(node: PageNode, isRoot: boolean): string {
 }
 
 /** Render a node (and subtree) to JSX, wrapping each in a positioned div. */
-function renderNode(doc: PageDocument, nodeId: string, isRoot: boolean): string {
+function renderNode(
+  doc: PageDocument,
+  nodeId: string,
+  isRoot: boolean,
+  visited: Set<string> = new Set(),
+): string {
+  // Guard against corrupted documents with cyclic children references.
+  if (visited.has(nodeId)) return "";
   const node = doc.nodes[nodeId];
   if (!node) return "";
   const def = getComponentDef(node.type);
   if (!def) return "";
 
+  visited.add(nodeId);
   const childCodes = def.isContainer
-    ? node.children.map((cid) => renderNode(doc, cid, false)).filter(Boolean)
+    ? node.children.map((cid) => renderNode(doc, cid, false, visited)).filter(Boolean)
     : [];
   const childrenBlock = childCodes.join("\n");
   const inner = def.toCode(node, indentBlock(childrenBlock, 2));

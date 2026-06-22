@@ -103,6 +103,22 @@ function findParentId(nodes: Record<string, PageNode>, childId: string): string 
   return null;
 }
 
+/**
+ * True when every id present in the document shares a single parent.
+ * ids missing from the document are ignored. Empty/single sets are trivially
+ * same-parent. Used to keep parent-relative ops on one coordinate plane.
+ */
+function sameParent(nodes: Record<string, PageNode>, ids: string[]): boolean {
+  let parent: string | null | undefined;
+  for (const id of ids) {
+    if (!nodes[id]) continue;
+    const p = findParentId(nodes, id);
+    if (parent === undefined) parent = p;
+    else if (parent !== p) return false;
+  }
+  return true;
+}
+
 export function collectSubtree(nodes: Record<string, PageNode>, id: string, acc: string[] = []): string[] {
   acc.push(id);
   const node = nodes[id];
@@ -174,12 +190,15 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
 
     selectNode: (id, additive) => {
+      // Changing selection ends the current undo coalescing session, so a later
+      // patch with the same tag (e.g. resize A → select B → resize A again)
+      // records a fresh snapshot instead of merging into the previous one.
       if (id === null) {
-        set({ selectedIds: [] });
+        set({ selectedIds: [], lastTag: null });
         return;
       }
       if (!additive) {
-        set({ selectedIds: [id] });
+        set({ selectedIds: [id], lastTag: null });
         return;
       }
       const current = get().selectedIds;
@@ -187,6 +206,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
         selectedIds: current.includes(id)
           ? current.filter((x) => x !== id)
           : [...current, id],
+        lastTag: null,
       });
     },
 
@@ -461,6 +481,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
     alignNodes: (ids, mode) => {
       const doc = get().document;
       if (!doc || ids.length < 2) return;
+      // frame is parent-relative; only align when every target shares a parent,
+      // otherwise we'd treat unrelated coordinate planes as one and fling nodes
+      // outside their containers.
+      if (!sameParent(doc.nodes, ids)) return;
       const frames = ids.map((id) => doc.nodes[id]?.frame).filter(Boolean) as NodeFrame[];
       const minX = Math.min(...frames.map((f) => f.x));
       const maxR = Math.max(...frames.map((f) => f.x + f.w));
@@ -487,6 +511,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
     distributeNodes: (ids, axis) => {
       const doc = get().document;
       if (!doc || ids.length < 3) return;
+      // Same parent-relative coordinate guard as alignNodes.
+      if (!sameParent(doc.nodes, ids)) return;
       const items = ids
         .map((id) => ({ id, f: doc.nodes[id]?.frame }))
         .filter((x): x is { id: string; f: NodeFrame } => Boolean(x.f));
