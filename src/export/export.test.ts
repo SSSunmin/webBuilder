@@ -58,6 +58,66 @@ describe("generateSpec", () => {
     expect(spec).not.toContain("pad");
     expect(spec).not.toContain("margin");
   });
+
+  it("emits a resolved tablet line for a node with a tablet frame override", () => {
+    const { document, childId } = buildDoc();
+    const doc = {
+      ...document,
+      nodes: {
+        ...document.nodes,
+        [childId]: {
+          ...document.nodes[childId],
+          overrides: { tablet: { frame: { x: 10, w: 200 } } },
+        },
+      },
+    };
+    const spec = generateSpec(doc);
+    expect(spec).toMatch(/태블릿: @\(10,\d+\) 200×\d+/);
+  });
+
+  it("emits a hidden line for a node hidden at mobile", () => {
+    const { document, childId } = buildDoc();
+    const doc = {
+      ...document,
+      nodes: {
+        ...document.nodes,
+        [childId]: {
+          ...document.nodes[childId],
+          overrides: { mobile: { hidden: true } },
+        },
+      },
+    };
+    const spec = generateSpec(doc);
+    expect(spec).toContain("모바일: 숨김");
+  });
+
+  it("adds no breakpoint lines for a node without overrides (no regression)", () => {
+    const { document } = buildDoc();
+    const spec = generateSpec(document);
+    expect(spec).not.toContain("태블릿:");
+    expect(spec).not.toContain("모바일:");
+  });
+
+  it("emits tablet then mobile lines, in order, when both override", () => {
+    const { document, childId } = buildDoc();
+    const doc = {
+      ...document,
+      nodes: {
+        ...document.nodes,
+        [childId]: {
+          ...document.nodes[childId],
+          overrides: {
+            tablet: { frame: { x: 10, w: 200 } },
+            mobile: { hidden: true },
+          },
+        },
+      },
+    };
+    const spec = generateSpec(doc);
+    expect(spec).toContain("태블릿:");
+    expect(spec).toContain("모바일: 숨김");
+    expect(spec.indexOf("태블릿:")).toBeLessThan(spec.indexOf("모바일: 숨김"));
+  });
 });
 
 describe("generateCode", () => {

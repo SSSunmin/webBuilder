@@ -1,6 +1,32 @@
 import { getComponentDef } from "../registry";
-import type { PageDocument, PageNode, Sides } from "../types/page";
-import { toSides } from "../types/page";
+import type { BreakpointId, PageDocument, PageNode, Sides } from "../types/page";
+import { BREAKPOINTS, resolveFrame, resolveHidden, toSides } from "../types/page";
+
+/** Breakpoints (excluding desktop base) that carry overrides, in order. */
+const OVERRIDE_BREAKPOINTS = BREAKPOINTS.filter(
+  (b) => b.id !== "desktop",
+) as { id: Exclude<BreakpointId, "desktop">; label: string; width: number }[];
+
+/**
+ * Per-breakpoint override lines for a node, one indent level deeper than the
+ * node line. Desktop (base) is not emitted; only tablet/mobile that actually
+ * override. Hidden wins over a frame override.
+ */
+function overrideLines(node: PageNode, depth: number): string[] {
+  const lines: string[] = [];
+  const indent = "  ".repeat(depth + 1);
+  for (const bp of OVERRIDE_BREAKPOINTS) {
+    const ov = node.overrides?.[bp.id];
+    if (!ov) continue;
+    if (resolveHidden(node, bp.id)) {
+      lines.push(`${indent}- ${bp.label}: 숨김`);
+    } else if (ov.frame) {
+      const f = resolveFrame(node, bp.id);
+      lines.push(`${indent}- ${bp.label}: @(${f.x},${f.y}) ${f.w}×${f.h}`);
+    }
+  }
+  return lines;
+}
 
 /** Serialize a node's props (per its schema) into a "key: value" summary. */
 function summarizeProps(node: PageNode): string {
@@ -61,7 +87,7 @@ function renderNode(
     node,
     isRoot,
   )}${summary ? ` — ${summary}` : ""}`;
-  const lines = [line];
+  const lines = [line, ...overrideLines(node, depth)];
   for (const childId of node.children) {
     lines.push(...renderNode(doc, childId, depth + 1, false, visited));
   }
