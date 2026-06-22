@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { TextPromptModal } from "../components/TextPromptModal";
 import { storage } from "../storage";
+import { ProjectFileError, parseProject, prepareImport } from "../storage/projectFile";
 import { createDocument } from "../store/editorStore";
 import type { PageMeta } from "../types/page";
 
@@ -19,6 +21,8 @@ export function Home() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<PageMeta[] | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     setProjects(await storage.list());
@@ -53,6 +57,27 @@ export function Home() {
     await refresh();
   };
 
+  // Import a .json backup as a new project (fresh id, never overwrites).
+  const handleImportFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // let the same file be picked again later
+    if (!file) return;
+    setImportError(null);
+    try {
+      const doc = prepareImport(parseProject(await file.text()));
+      await storage.save(doc);
+      navigate(`/editor/${doc.id}`);
+    } catch (err) {
+      // Bad file → show the specific reason; anything else (e.g. storage full)
+      // → a generic notice rather than a raw browser error string.
+      setImportError(
+        err instanceof ProjectFileError
+          ? err.message
+          : "가져오지 못했습니다. 저장 공간이 부족하거나 파일을 읽을 수 없습니다.",
+      );
+    }
+  };
+
   return (
     <main className="min-h-screen bg-canvas px-6 py-8 text-ink">
       <section className="mx-auto flex max-w-5xl flex-col gap-8">
@@ -61,13 +86,38 @@ export function Home() {
             <p className="text-sm font-medium text-brand">webBuilder</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-normal">프로젝트</h1>
           </div>
-          <button
-            onClick={() => setModal({ mode: "create" })}
-            className="inline-flex h-10 items-center justify-center rounded-button bg-brand px-4 text-sm font-semibold text-white shadow-hero transition hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
-          >
-            새 프로젝트
-          </button>
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={handleImportFile}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              title="프로젝트 .json 파일을 새 프로젝트로 가져오기"
+              className="inline-flex h-10 items-center justify-center rounded-button border border-line bg-white px-4 text-sm font-semibold text-brand transition hover:bg-brand-pale focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
+            >
+              가져오기
+            </button>
+            <button
+              onClick={() => setModal({ mode: "create" })}
+              className="inline-flex h-10 items-center justify-center rounded-button bg-brand px-4 text-sm font-semibold text-white shadow-hero transition hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
+            >
+              새 프로젝트
+            </button>
+          </div>
         </header>
+
+        {importError && (
+          <p
+            role="alert"
+            className="-mt-4 rounded-card border border-error/30 bg-error/5 px-4 py-2 text-sm text-error"
+          >
+            가져오기 실패: {importError}
+          </p>
+        )}
 
         {projects === null ? (
           <p className="py-12 text-center text-sm text-muted">불러오는 중…</p>

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { downloadFile, slugify } from "../lib/download";
 import { storage } from "../storage";
+import { serializeProject } from "../storage/projectFile";
 import { useEditorStore } from "../store/editorStore";
 import { BREAKPOINTS } from "../types/page";
 import { ExportModal } from "./ExportModal";
@@ -35,6 +37,16 @@ export function BuilderHeader({ projectId }: BuilderHeaderProps) {
     await storage.save(document);
     setSaveState("saved");
     window.setTimeout(() => setSaveState("idle"), 1500);
+  };
+
+  // Back up the whole project as a .json file (distinct from MD Export).
+  const handleExportJson = () => {
+    if (!document) return;
+    downloadFile(
+      `${slugify(document.meta.name)}.json`,
+      serializeProject(document),
+      "application/json",
+    );
   };
 
   return (
@@ -93,6 +105,14 @@ export function BuilderHeader({ projectId }: BuilderHeaderProps) {
           className="h-9 rounded-button border border-line bg-white px-3 text-sm font-medium text-muted hover:bg-line2 disabled:opacity-50"
         >
           미리보기
+        </button>
+        <button
+          onClick={handleExportJson}
+          disabled={!document}
+          title="프로젝트를 .json 파일로 백업"
+          className="h-9 rounded-button border border-line bg-white px-3 text-sm font-medium text-muted hover:bg-line2 disabled:opacity-50"
+        >
+          JSON ↓
         </button>
         <button
           onClick={handleSave}
