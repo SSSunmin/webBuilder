@@ -35,6 +35,29 @@ describe("generateSpec", () => {
     const spec = generateSpec(useEditorStore.getState().document!);
     expect(spec).toContain("bg #ff0000");
   });
+
+  it("reports borderRadius/padding/margin only when non-zero, with T/R/B/L for asymmetric", () => {
+    const { childId } = buildDoc();
+    const store = useEditorStore.getState();
+    store.setNodeRadius(childId, 8);
+    store.updateNodeSpacing(childId, {
+      padding: { top: 8, right: 8, bottom: 8, left: 8 },
+      margin: { top: 8, right: 16, bottom: 8, left: 16 },
+    });
+    const spec = generateSpec(useEditorStore.getState().document!);
+    expect(spec).toContain("radius 8");
+    expect(spec).toContain("pad 8");
+    expect(spec).not.toContain("pad 8/");
+    expect(spec).toContain("margin 8/16/8/16");
+  });
+
+  it("omits radius/pad/margin notations when all values are zero", () => {
+    const { document } = buildDoc();
+    const spec = generateSpec(document);
+    expect(spec).not.toContain("radius");
+    expect(spec).not.toContain("pad");
+    expect(spec).not.toContain("margin");
+  });
 });
 
 describe("generateCode", () => {
@@ -78,6 +101,69 @@ describe("generateCode", () => {
     useEditorStore.getState().updateNodeProps(textId, { color: "#ff0000" });
     const code = generateCode(useEditorStore.getState().document!);
     expect(code).toContain('style={{ color: "#ff0000" }}');
+  });
+
+  it("emits uniform padding as a number and asymmetric margin as a shorthand string", () => {
+    const { childId } = buildDoc();
+    useEditorStore.getState().updateNodeSpacing(childId, {
+      padding: { top: 8, right: 8, bottom: 8, left: 8 },
+      margin: { top: 8, right: 16, bottom: 24, left: 32 },
+    });
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain("padding: 8");
+    expect(code).toContain('margin: "8px 16px 24px 32px"');
+  });
+
+  it("keeps the root centering margin even when the root has a user margin", () => {
+    const { document } = buildDoc();
+    const rootId = document.rootId;
+    useEditorStore.getState().updateNodeSpacing(rootId, {
+      margin: { top: 12, right: 12, bottom: 12, left: 12 },
+    });
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain('margin: "0 auto"');
+    // The user's root margin must not leak into the generated code.
+    expect(code).not.toContain("margin: 12");
+  });
+
+  it("omits padding and margin when all sides are zero", () => {
+    const { childId } = buildDoc();
+    useEditorStore.getState().updateNodeSpacing(childId, {
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+    });
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).not.toContain("padding:");
+    expect(code).not.toContain("margin: 0");
+    expect(code).not.toContain('margin: "0px');
+  });
+});
+
+describe("import header", () => {
+  it("emits a sorted, deduped import for PascalCase components only", () => {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Imports");
+    useEditorStore.getState().addNode(doc.rootId, "Navbar");
+    useEditorStore.getState().addNode(doc.rootId, "Button");
+    useEditorStore.getState().addNode(doc.rootId, "Link"); // renders as <a>, lowercase
+    const code = generateCode(useEditorStore.getState().document!);
+    // Components are sorted and deduped; the root Layout is included too.
+    expect(code).toContain('import { Button, Layout, Navbar } from "./components";');
+    // The import header is the very first line.
+    expect(code.startsWith("import {")).toBe(true);
+    // Lowercase/HTML tags (<a>, <div>) are not imported.
+    expect(code).not.toMatch(/import \{[^}]*\b(a|div)\b[^}]*\}/);
+  });
+
+  it("imports the root container component and excludes lowercase HTML tags", () => {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Containers");
+    useEditorStore.getState().addNode(doc.rootId, "Link"); // -> <a>
+    const code = generateCode(useEditorStore.getState().document!);
+    // The root Layout container is a PascalCase component, so it is imported.
+    expect(code).toContain('import { Layout } from "./components";');
+    // The lowercase <a> from Link is not added to the import list.
+    expect(code).not.toMatch(/import \{[^}]*\ba\b[^}]*\}/);
   });
 });
 

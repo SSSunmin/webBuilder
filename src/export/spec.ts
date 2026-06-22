@@ -1,5 +1,6 @@
 import { getComponentDef } from "../registry";
-import type { PageDocument, PageNode } from "../types/page";
+import type { PageDocument, PageNode, Sides } from "../types/page";
+import { toSides } from "../types/page";
 
 /** Serialize a node's props (per its schema) into a "key: value" summary. */
 function summarizeProps(node: PageNode): string {
@@ -18,11 +19,26 @@ function summarizeProps(node: PageNode): string {
   return parts.join(", ");
 }
 
+/** Compact spacing notation: omitted (null) when all zero, a number when
+ * uniform, or a "T/R/B/L" string when asymmetric. */
+function spacingSummary(sides: Sides): string | null {
+  const { top, right, bottom, left } = sides;
+  if (top === 0 && right === 0 && bottom === 0 && left === 0) return null;
+  if (top === right && right === bottom && bottom === left) return String(top);
+  return `${top}/${right}/${bottom}/${left}`;
+}
+
 function frameSummary(node: PageNode, isRoot: boolean): string {
   const f = node.frame;
   const size = `${f.w}×${f.h}`;
   const pos = isRoot ? size : `@(${f.x},${f.y}) ${size}`;
-  return node.background ? `${pos}, bg ${node.background}` : pos;
+  const parts = [node.background ? `${pos}, bg ${node.background}` : pos];
+  if (node.borderRadius) parts.push(`radius ${node.borderRadius}`);
+  const pad = spacingSummary(toSides(node.padding));
+  if (pad !== null) parts.push(`pad ${pad}`);
+  const margin = spacingSummary(toSides(node.margin));
+  if (margin !== null) parts.push(`margin ${margin}`);
+  return parts.join(", ");
 }
 
 function renderNode(
