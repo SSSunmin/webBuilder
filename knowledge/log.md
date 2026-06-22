@@ -2,6 +2,18 @@
 
 OKF 번들의 변경 이력. 최신 항목이 위. `/okf` 실행 시 knowledge-curator가 여기에 기록한다.
 
+## 2026-06-22
+
+초기 번들 생성 (7개 개념 파일 신규 작성):
+- `overview/project.md` — 프로젝트 개요, 기술 스택, 폴더 구조, 저장 vs Export, 자체 DB 없음 명시
+- `architecture/editor-architecture.md` — 5-zone 레이아웃, DnD 흐름, 스냅 시스템
+- `data-model/page-node.md` — PageDocument/PageNode/NodeFrame/Sides/NodeOverride/EventBinding 타입
+- `store/editor-store.md` — Zustand 상태 구조, 전체 액션, undo/redo coalescing
+- `registry/component-registry.md` — ComponentDef/BlockDef 구조, 등록 컴포넌트·블록 전체 목록
+- `export/export-format.md` — spec/code/both 생성기, 이벤트·override 출력 규칙
+- `storage/storage-layer.md` — StorageAdapter 인터페이스, LocalStorageAdapter 구현 상세
+- `responsive/breakpoints.md` — 브레이크포인트 캐스케이드, resolveFrame/resolveHidden
+
 <!-- 예시:
 ## 2026-01-01
 - 초기 번들 생성: overview, data-model, api 개념 추가.
