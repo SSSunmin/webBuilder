@@ -98,6 +98,17 @@ export function Home() {
                   onClick={() => navigate(`/editor/${p.id}`)}
                   className="flex flex-1 flex-col items-start text-left"
                 >
+                  {p.thumbnail ? (
+                    <img
+                      src={p.thumbnail}
+                      alt=""
+                      className="mb-3 aspect-[4/3] w-full rounded-chip border border-line2 bg-canvas object-contain"
+                    />
+                  ) : (
+                    <div className="mb-3 flex aspect-[4/3] w-full items-center justify-center rounded-chip border border-dashed border-line2 bg-canvas text-xs text-muted">
+                      미리보기 없음
+                    </div>
+                  )}
                   <span className="line-clamp-2 font-semibold text-ink">{p.name}</span>
                   <span className="mt-2 text-xs text-muted">
                     수정: {formatDate(p.updatedAt)}

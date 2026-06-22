@@ -34,7 +34,7 @@
 
 ### 저장 계층
 
-- [저장 계층 (StorageAdapter)](/storage/storage-layer.md) — 인터페이스, LocalStorageAdapter, localStorage 키 구조
+- [저장 계층 (StorageAdapter)](/storage/storage-layer.md) — 인터페이스, LocalStorageAdapter, localStorage 키 구조, 썸네일 생성(generateThumbnail)·quota fallback
 
 ### 반응형
 

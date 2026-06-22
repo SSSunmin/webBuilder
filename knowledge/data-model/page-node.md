@@ -38,10 +38,11 @@ interface PageMeta {
   id: string;
   name: string;
   updatedAt: string;
+  thumbnail?: string;  // SVG 와이어프레임 data URI (홈 카드 미리보기)
 }
 ```
 
-전체 `PageDocument`를 로드하지 않고 홈 카드를 렌더하기 위한 경량 구조. `LocalStorageAdapter`가 별도 인덱스 키(`webbuilder:index`)에 `PageMeta[]`를 직렬화한다.
+전체 `PageDocument`를 로드하지 않고 홈 카드를 렌더하기 위한 경량 구조. `LocalStorageAdapter`가 별도 인덱스 키(`webbuilder:index`)에 `PageMeta[]`를 직렬화한다. `thumbnail`은 `save()` 시 `generateThumbnail(doc)`으로 채워져 인덱스에도 함께 저장되므로, 카드가 문서 본문을 로드하지 않고 미리보기를 그릴 수 있다 — 생성 상세는 [/storage/storage-layer.md](/storage/storage-layer.md) 참조.
 
 ## PageNode — 트리 노드
 

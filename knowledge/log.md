@@ -2,6 +2,11 @@
 
 OKF 번들의 변경 이력. 최신 항목이 위. `/okf` 실행 시 knowledge-curator가 여기에 기록한다.
 
+## 2026-06-22 (홈 카드 썸네일)
+
+- `storage/storage-layer.md` 갱신: `save()`가 `generateThumbnail(doc)`으로 SVG 썸네일을 생성해 문서·인덱스 양쪽에 저장, `QuotaExceededError` 시 썸네일 없이 재시도(private `persist`), `duplicate()`는 인덱스에서 완전한 meta를 읽어 반환. 신규 "썸네일 생성"(`src/thumbnail/generateThumbnail.ts`) 섹션 추가.
+- `data-model/page-node.md` 갱신: `PageMeta.thumbnail?` 필드 문서화.
+
 ## 2026-06-22
 
 초기 번들 생성 (7개 개념 파일 신규 작성):

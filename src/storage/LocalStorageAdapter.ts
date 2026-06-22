@@ -1,4 +1,5 @@
 import type { PageDocument, PageMeta } from "../types/page";
+import { generateThumbnail } from "../thumbnail/generateThumbnail";
 import type { StorageAdapter } from "./StorageAdapter";
 
 const INDEX_KEY = "webbuilder:index";
@@ -6,6 +7,17 @@ const projectKey = (id: string) => `webbuilder:project:${id}`;
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+/** True for the storage-full error, across browsers (name vs legacy codes). */
+function isQuotaError(e: unknown): boolean {
+  return (
+    e instanceof DOMException &&
+    (e.name === "QuotaExceededError" ||
+      e.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+      e.code === 22 ||
+      e.code === 1014)
+  );
 }
 
 /** Browser localStorage-backed persistence. */
@@ -45,15 +57,33 @@ export class LocalStorageAdapter implements StorageAdapter {
   }
 
   async save(doc: PageDocument): Promise<void> {
+    const updatedAt = nowIso();
+    const thumbnail = generateThumbnail(doc);
+    try {
+      this.persist(doc, updatedAt, thumbnail);
+    } catch (e) {
+      // If storage is full, drop the (largest, optional) thumbnail and retry so
+      // the project itself still saves rather than failing wholesale.
+      if (isQuotaError(e)) {
+        this.persist(doc, updatedAt, undefined);
+        return;
+      }
+      throw e;
+    }
+  }
+
+  /** Write the document and its index entry with the given thumbnail. */
+  private persist(doc: PageDocument, updatedAt: string, thumbnail?: string): void {
     const updated: PageDocument = {
       ...doc,
-      meta: { ...doc.meta, updatedAt: nowIso() },
+      meta: { ...doc.meta, updatedAt, thumbnail },
     };
     localStorage.setItem(projectKey(updated.id), JSON.stringify(updated));
     this.upsertIndex({
       id: updated.id,
       name: updated.meta.name,
-      updatedAt: updated.meta.updatedAt,
+      updatedAt,
+      thumbnail,
     });
   }
 
@@ -77,6 +107,9 @@ export class LocalStorageAdapter implements StorageAdapter {
       },
     };
     await this.save(copy);
-    return { id: copy.id, name: copy.meta.name, updatedAt: copy.meta.updatedAt };
+    // save() stamped updatedAt and the thumbnail into the index — return that
+    // complete meta rather than the pre-save copy (which lacks both).
+    const saved = this.readIndex().find((m) => m.id === copy.id);
+    return saved ?? { id: copy.id, name: copy.meta.name, updatedAt: copy.meta.updatedAt };
   }
 }
