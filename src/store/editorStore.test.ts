@@ -510,6 +510,58 @@ describe("duplicateNode overrides", () => {
   });
 });
 
+describe("node events", () => {
+  it("adds a default click binding and edits its fields", () => {
+    const id = addAt(0, 0, 100, 40);
+    store().addNodeEvent(id);
+    let events = store().document!.nodes[id].events!;
+    expect(events).toHaveLength(1);
+    expect(events[0].trigger).toBe("click");
+    expect(events[0].action).toBe("custom");
+
+    store().updateNodeEvent(id, events[0].id, { action: "navigate", target: "/pricing" });
+    events = store().document!.nodes[id].events!;
+    expect(events[0]).toMatchObject({ action: "navigate", target: "/pricing" });
+  });
+
+  it("removes a binding by id, leaving the others", () => {
+    const id = addAt(0, 0, 100, 40);
+    store().addNodeEvent(id);
+    store().addNodeEvent(id);
+    const [first, second] = store().document!.nodes[id].events!;
+    store().removeNodeEvent(id, first.id);
+    const events = store().document!.nodes[id].events!;
+    expect(events).toHaveLength(1);
+    expect(events[0].id).toBe(second.id);
+  });
+
+  it("each add is its own undo step", () => {
+    const id = addAt(0, 0, 100, 40);
+    const past0 = store().past.length;
+    store().addNodeEvent(id);
+    store().addNodeEvent(id);
+    expect(store().past.length).toBe(past0 + 2);
+    store().undo();
+    expect(store().document!.nodes[id].events).toHaveLength(1);
+  });
+
+  it("duplicateNode deep-clones events so edits don't leak to the original", () => {
+    const rootId = store().document!.rootId;
+    const a = store().addNode(rootId, "Card")!;
+    store().addNodeEvent(a);
+    const evId = store().document!.nodes[a].events![0].id;
+
+    const dup = store().duplicateNode(a)!;
+    const copyEvId = store().document!.nodes[dup].events![0].id;
+    // The clone's binding gets a fresh id (no collision with the original).
+    expect(copyEvId).not.toBe(evId);
+    store().updateNodeEvent(dup, copyEvId, { target: "변경됨" });
+
+    expect(store().document!.nodes[a].events![0].target).not.toBe("변경됨");
+    expect(store().document!.nodes[a].events![0].id).toBe(evId);
+  });
+});
+
 describe("updateNodeSpacing", () => {
   it("merges per-side padding without dropping other sides", () => {
     const id = addAt(0, 0, 100, 40);

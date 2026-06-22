@@ -199,6 +199,70 @@ describe("generateCode", () => {
   });
 });
 
+describe("event bindings", () => {
+  /** Add a Button to root with one event binding and return its id. */
+  function buildWithEvent(action: string, target?: string) {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Events");
+    const id = useEditorStore.getState().addNode(doc.rootId, "Button")!;
+    useEditorStore.getState().addNodeEvent(id);
+    const evId = useEditorStore.getState().document!.nodes[id].events![0].id;
+    useEditorStore.getState().updateNodeEvent(id, evId, {
+      action: action as never,
+      ...(target !== undefined ? { target } : {}),
+    });
+    return id;
+  }
+
+  it("spec lists an event line under the node", () => {
+    buildWithEvent("navigate", "/pricing");
+    const spec = generateSpec(useEditorStore.getState().document!);
+    expect(spec).toContain("이벤트: 클릭 → 페이지 이동: /pricing");
+  });
+
+  it("code emits an onClick handler on the wrapper div", () => {
+    buildWithEvent("navigate", "/pricing");
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain('onClick={() => { window.location.href = "/pricing"; }}');
+  });
+
+  it("passes the event arg only when a body needs it (submit → preventDefault)", () => {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Submit");
+    const id = useEditorStore.getState().addNode(doc.rootId, "Button")!;
+    useEditorStore.getState().addNodeEvent(id);
+    const evId = useEditorStore.getState().document!.nodes[id].events![0].id;
+    useEditorStore.getState().updateNodeEvent(id, evId, { trigger: "submit", action: "submit" });
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain("onSubmit={(e) => { e.preventDefault();");
+  });
+
+  it("merges multiple bindings on the same trigger into one handler", () => {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Multi");
+    const id = useEditorStore.getState().addNode(doc.rootId, "Button")!;
+    const add = () => {
+      useEditorStore.getState().addNodeEvent(id);
+      return useEditorStore.getState().document!.nodes[id].events!.at(-1)!.id;
+    };
+    useEditorStore.getState().updateNodeEvent(id, add(), { action: "openUrl", target: "https://a" });
+    useEditorStore.getState().updateNodeEvent(id, add(), { action: "scrollTo", target: "#b" });
+    const code = generateCode(useEditorStore.getState().document!);
+    // One onClick handler containing both statements.
+    expect((code.match(/onClick=/g) ?? []).length).toBe(1);
+    expect(code).toContain('window.open("https://a"');
+    expect(code).toContain('document.querySelector("#b")');
+  });
+
+  it("adds no handler attributes when a node has no events (no regression)", () => {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("None");
+    useEditorStore.getState().addNode(doc.rootId, "Button");
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).not.toContain("onClick=");
+  });
+});
+
 describe("import header", () => {
   it("emits a sorted, deduped import for PascalCase components only", () => {
     const store = useEditorStore.getState();

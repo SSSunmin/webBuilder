@@ -1,3 +1,5 @@
+import type { EventBinding } from "./events";
+
 export interface NodeFrame {
   x: number;
   y: number;
@@ -65,6 +67,8 @@ export interface PageNode {
   margin?: Sides;
   /** Per-breakpoint overrides; desktop is the base frame (no override). */
   overrides?: Partial<Record<Exclude<BreakpointId, "desktop">, NodeOverride>>;
+  /** Interaction bindings (trigger → action), emitted to the spec and code. */
+  events?: EventBinding[];
 }
 
 export interface PageDocument {
