@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { PageNode } from "./page";
 
 /** Editor control used by the inspector to render a field for a prop. */
-export type PropControl = "text" | "number" | "select" | "boolean" | "color";
+export type PropControl = "text" | "number" | "select" | "boolean" | "color" | "icon";
 
 /** Schema for a single editable prop of a component. */
 export interface PropSchema {

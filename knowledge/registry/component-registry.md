@@ -2,8 +2,8 @@
 type: Reference
 title: 컴포넌트 레지스트리
 description: ComponentDef / BlockDef 구조, 등록된 컴포넌트·블록 전체 목록, 팔레트·인스펙터·Export가 공유하는 단일 소스.
-resource: src/registry/index.ts, src/registry/components.tsx, src/registry/blocks.ts
-tags: [registry, component, block, palette, inspector]
+resource: src/registry/index.ts, src/registry/components.tsx, src/registry/blocks.ts, src/registry/icons.ts
+tags: [registry, component, block, palette, inspector, icon]
 timestamp: 2026-06-22
 ---
 
@@ -61,7 +61,7 @@ interface ComponentDef {
 |---|---|---|---|---|
 | Heading | Heading | false | 420×48 | content, level (h1/h2/h3) |
 | Text | Text | false | 240×28 | content, size, weight, color |
-| Button | Button | false | 132×44 | text, variant (primary/ghost/soft) |
+| Button | Button | false | 132×44 | text, variant (primary/ghost/soft), icon, iconSize, hoverBg, hoverText |
 | Link | Link | false | 120×24 | text, href |
 | Badge | Badge | false | 72×24 | text, tone (brand/accent/muted) |
 | Avatar | Avatar | false | 48×48 | src, initials |
@@ -135,6 +135,18 @@ interface BlockChildSpec {
 - children:
   - `Text` @(24,34) 320×20, `{content:"© BigValue", size:"sm", color:"#ffffff"}`
   - `Text` @(560,34) 376×20, `{content:"이용약관 · ...", size:"sm", color:"#cbd5e1"}`
+
+## 아이콘 레지스트리 (`src/registry/icons.ts`)
+
+Button 등에서 쓰는 예약 SVG 아이콘 세트. `iconDefs: IconDef[]`(`{ name, label, svg }`, `svg`는 24×24 viewBox의 **inner 마크업**, `stroke="currentColor"`로 글자색 상속)과 `getIcon(name)`을 export한다.
+
+- **확장 구조**: 지금은 18종이 코드에 baked-in. 추후 백엔드가 사용자 업로드 아이콘을 `iconDefs`에 병합할 수 있게 레지스트리 형태로 설계됨. `name`은 안정적 식별자이며 코드 export에 그대로 출력된다.
+- **렌더**: 신뢰된(코드 작성) 마크업이라 `dangerouslySetInnerHTML`로 렌더한다. 사용자 업로드 도입 시 **sanitize 필수**.
+- **인스펙터 연동**: 새 `PropControl "icon"` → 인스펙터가 아이콘 미리보기 그리드 피커를 렌더(`InspectorPane`의 `IconPicker`). Button은 `icon`(선택)·`iconSize`(px)로 사용.
+
+## Button 호버 (variant 외 사용자 지정)
+
+`hoverBg`/`hoverText`(color) prop으로 호버 시 배경·글자색을 지정한다. 캔버스 미리보기는 CSS 변수(`--btn-hover-bg`/`--btn-hover-text`) + 조건부 Tailwind arbitrary 클래스(`hover:!bg-[var(--btn-hover-bg)]` 등)로 **실제 :hover**를 보여준다(render는 훅을 못 쓰므로). 색 미설정 시 클래스를 추가하지 않아 invalid var로 기본 variant 호버를 덮지 않는다. Export는 prop으로 전달한다.
 
 ## hidden 컴포넌트 정책
 

@@ -49,10 +49,12 @@ function generateMarkdown(doc: PageDocument, mode: ExportMode): string
 | 위치+크기 | 항상 | `@(24,16) 320×48` (루트는 크기만) |
 | bg | background 있을 때 | `bg #ffffff` |
 | radius | borderRadius > 0 | `radius 14` |
+| shadow | boxShadow 있을 때 | `shadow 0/4/12/0 #000000 15%` (x/y/blur/spread 색 투명도) |
 | pad | padding이 0이 아닐 때 | `pad 16` 또는 `pad 8/16/8/16` |
 | margin | margin이 0이 아닐 때 | `margin 8` |
 
 spacing 표기법: 균일하면 단일 숫자, 비균일하면 `T/R/B/L`.
+props 요약(`summarizeProps`)은 스키마 순서대로 출력하되, `icon`이 없으면 `iconSize`(default 16)는 생략한다.
 
 ### 브레이크포인트 오버라이드 출력
 
@@ -97,7 +99,8 @@ export function Page() {
 
 - 루트: `position:"relative"`, `margin:"0 auto"`, width/height
 - 자식: `position:"absolute"`, left/top/width/height
-- 공통(있을 때): `background`, `borderRadius`, `padding`, `margin`(루트 제외)
+- 공통(있을 때): `background`, `borderRadius`, `boxShadow`(`shadowCss`로 ShadowSpec → rgba box-shadow), `padding`, `margin`(루트 제외)
+- Button은 `toCode`에서 `icon`/`iconSize`(아이콘 있을 때만)·`hoverBg`/`hoverText`를 prop으로 전달 — 소비 측 Button이 구현
 
 spacing: 균일이면 숫자, 비균일이면 `"Tpx Rpx Bpx Lpx"` 문자열.
 

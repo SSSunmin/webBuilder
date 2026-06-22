@@ -1,12 +1,13 @@
 import { create } from "zustand";
 import { createNode, defaultFrameFor, getBlockDef, getComponentDef } from "../registry";
-import { resolveFrame, toSides } from "../types/page";
+import { DEFAULT_SHADOW, resolveFrame, toSides } from "../types/page";
 import type {
   BreakpointId,
   NodeFrame,
   NodeOverride,
   PageDocument,
   PageNode,
+  ShadowSpec,
   Sides,
 } from "../types/page";
 import type { EventBinding } from "../types/events";
@@ -51,6 +52,11 @@ function normalizeDocument(doc: PageDocument): PageDocument {
     // canvas keeps matching each component's default rounded corners.
     if (next.borderRadius === undefined && def?.defaultBorderRadius !== undefined) {
       next = { ...next, borderRadius: def.defaultBorderRadius };
+    }
+    // Drop a legacy/invalid shadow value (pre pixel-level ShadowSpec format, or
+    // a null from external JSON) so only a ShadowSpec object or undefined remain.
+    if (next.boxShadow != null && typeof (next.boxShadow as unknown) !== "object") {
+      next = { ...next, boxShadow: undefined };
     }
     if (next !== node) changed = true;
     nodes[id] = next;
@@ -97,6 +103,10 @@ interface EditorState {
   moveNodeBy: (id: string, dx: number, dy: number, tag?: string) => void;
   setNodeBackground: (id: string, background: string) => void;
   setNodeRadius: (id: string, borderRadius: number) => void;
+  /** Merge a partial pixel shadow into the node (creates a default if none). */
+  updateNodeShadow: (id: string, partial: Partial<ShadowSpec>) => void;
+  /** Remove a node's shadow entirely. */
+  clearNodeShadow: (id: string) => void;
   updateNodeSpacing: (
     id: string,
     partial: { padding?: Partial<Sides>; margin?: Partial<Sides> },
@@ -113,6 +123,8 @@ interface EditorState {
   moveNodeAdjacent: (id: string, refId: string, side: "before" | "after") => void;
   alignNodes: (ids: string[], mode: AlignMode) => void;
   distributeNodes: (ids: string[], axis: "h" | "v") => void;
+  /** Center selected direct children within their (also-selected) parent box. */
+  centerInParent: (ids: string[], axis: "h" | "v") => void;
   /**
    * Set a node's per-breakpoint hidden flag. desktop is always visible, so a
    * desktop call is a no-op. Recorded as one undo step.
@@ -139,7 +151,7 @@ function findParentId(nodes: Record<string, PageNode>, childId: string): string 
  * ids missing from the document are ignored. Empty/single sets are trivially
  * same-parent. Used to keep parent-relative ops on one coordinate plane.
  */
-function sameParent(nodes: Record<string, PageNode>, ids: string[]): boolean {
+export function sameParent(nodes: Record<string, PageNode>, ids: string[]): boolean {
   let parent: string | null | undefined;
   for (const id of ids) {
     if (!nodes[id]) continue;
@@ -148,6 +160,28 @@ function sameParent(nodes: Record<string, PageNode>, ids: string[]): boolean {
     else if (parent !== p) return false;
   }
   return true;
+}
+
+/**
+ * Detect a "parent + its direct children" selection: exactly one of the ids is
+ * the direct parent of all the others. Returns the parent id and the child ids,
+ * or null when the selection isn't that shape (e.g. only siblings, or a
+ * non-direct ancestor). Used to center children within their parent box.
+ */
+export function findParentChild(
+  nodes: Record<string, PageNode>,
+  ids: string[],
+): { parentId: string; childIds: string[] } | null {
+  if (ids.length < 2) return null;
+  for (const pid of ids) {
+    const parent = nodes[pid];
+    if (!parent) continue;
+    const others = ids.filter((i) => i !== pid);
+    if (others.length && others.every((c) => parent.children.includes(c))) {
+      return { parentId: pid, childIds: others };
+    }
+  }
+  return null;
 }
 
 /** Deep-copy a node's per-breakpoint overrides so clones don't share nested objects. */
@@ -425,6 +459,18 @@ export const useEditorStore = create<EditorState>((set, get) => {
         `radius:${id}`,
       ),
 
+    updateNodeShadow: (id, partial) =>
+      patchNode(
+        id,
+        (node) => ({ ...node, boxShadow: { ...(node.boxShadow ?? DEFAULT_SHADOW), ...partial } }),
+        // Per-field tag so dragging X then Y then blur are separate undo steps
+        // (enabling the shadow uses {} → "shadow:<id>:", its own step).
+        `shadow:${id}:${Object.keys(partial).join(",")}`,
+      ),
+
+    clearNodeShadow: (id) =>
+      patchNode(id, (node) => ({ ...node, boxShadow: undefined }), null),
+
     updateNodeSpacing: (id, partial) => {
       const tag =
         `spacing:${id}:` +
@@ -491,6 +537,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
           props: { ...n.props },
           ...(n.padding ? { padding: { ...n.padding } } : {}),
           ...(n.margin ? { margin: { ...n.margin } } : {}),
+          ...(n.boxShadow ? { boxShadow: { ...n.boxShadow } } : {}),
           ...(n.overrides ? { overrides: cloneOverrides(n.overrides) } : {}),
           ...(n.events
             ? { events: n.events.map((e) => ({ ...e, id: crypto.randomUUID() })) }
@@ -665,6 +712,28 @@ export const useEditorStore = create<EditorState>((set, get) => {
             ? { x: Math.round(targetCenter - it.f.w / 2) }
             : { y: Math.round(targetCenter - it.f.h / 2) };
       });
+      patchFrames(next, null);
+    },
+
+    centerInParent: (ids, axis) => {
+      const doc = get().document;
+      if (!doc) return;
+      const pc = findParentChild(doc.nodes, ids);
+      if (!pc) return;
+      const bp = get().activeBreakpoint;
+      // Child frames are parent-relative, so center within the parent's padded
+      // content box (children snap to that area). The other axis keeps
+      // inheriting (sparse override).
+      const pf = resolveFrame(doc.nodes[pc.parentId], bp);
+      const pad = toSides(doc.nodes[pc.parentId].padding);
+      const next: Record<string, Partial<NodeFrame>> = {};
+      for (const cid of pc.childIds) {
+        const cf = resolveFrame(doc.nodes[cid], bp);
+        next[cid] =
+          axis === "h"
+            ? { x: Math.round(pad.left + (pf.w - pad.left - pad.right - cf.w) / 2) }
+            : { y: Math.round(pad.top + (pf.h - pad.top - pad.bottom - cf.h) / 2) };
+      }
       patchFrames(next, null);
     },
 

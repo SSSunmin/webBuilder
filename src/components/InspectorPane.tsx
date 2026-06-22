@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import { getComponentDef } from "../registry";
+import { iconDefs } from "../registry/icons";
 import { useEditorStore } from "../store/editorStore";
 import type { PropSchema } from "../types/component";
 import { BREAKPOINTS, resolveFrame, resolveHidden, toSides } from "../types/page";
-import type { NodeFrame, Sides } from "../types/page";
+import type { NodeFrame, ShadowSpec, Sides } from "../types/page";
 import { ACTION_TYPES, EVENT_TRIGGERS } from "../types/events";
 import type { ActionType, EventBinding, EventTrigger } from "../types/events";
 
@@ -12,6 +13,13 @@ const SIDES: { key: keyof Sides; label: string }[] = [
   { key: "right", label: "우" },
   { key: "bottom", label: "하" },
   { key: "left", label: "좌" },
+];
+
+const SHADOW_FIELDS: { key: "x" | "y" | "blur" | "spread"; label: string }[] = [
+  { key: "x", label: "X" },
+  { key: "y", label: "Y" },
+  { key: "blur", label: "흐림" },
+  { key: "spread", label: "확산" },
 ];
 
 function SidesField({
@@ -46,6 +54,48 @@ function SidesField({
 
 const inputCls =
   "h-9 w-full rounded-button border border-line px-2 text-sm focus:border-brand focus:outline-none";
+
+/** Visual grid picker for a component's icon prop ("" = no icon). */
+function IconPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const cell = (active: boolean) =>
+    `flex h-9 items-center justify-center rounded-button border ${
+      active ? "border-brand bg-brand-pale text-brand" : "border-line text-ink2 hover:bg-line2"
+    }`;
+  return (
+    <div className="grid grid-cols-6 gap-1">
+      <button type="button" title="없음" onClick={() => onChange("")} className={cell(!value)}>
+        <span className="text-xs">✕</span>
+      </button>
+      {iconDefs.map((ic) => (
+        <button
+          key={ic.name}
+          type="button"
+          title={ic.label}
+          onClick={() => onChange(ic.name)}
+          className={cell(value === ic.name)}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width={18}
+            height={18}
+            dangerouslySetInnerHTML={{ __html: ic.svg }}
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function PropField({
   schema,
@@ -115,6 +165,14 @@ function PropField({
             onChange={(e) => onChange(e.target.value)}
           />
         </div>
+      );
+      break;
+    case "icon":
+      control = (
+        <IconPicker
+          value={typeof value === "string" ? value : ""}
+          onChange={(v) => onChange(v)}
+        />
       );
       break;
     default:
@@ -227,6 +285,8 @@ export function InspectorPane() {
   const updateNodeFrame = useEditorStore((s) => s.updateNodeFrame);
   const setNodeBackground = useEditorStore((s) => s.setNodeBackground);
   const setNodeRadius = useEditorStore((s) => s.setNodeRadius);
+  const updateNodeShadow = useEditorStore((s) => s.updateNodeShadow);
+  const clearNodeShadow = useEditorStore((s) => s.clearNodeShadow);
   const updateNodeSpacing = useEditorStore((s) => s.updateNodeSpacing);
   const bp = useEditorStore((s) => s.activeBreakpoint);
   const setNodeHidden = useEditorStore((s) => s.setNodeHidden);
@@ -333,6 +393,67 @@ export function InspectorPane() {
                   }
                 />
               </label>
+              <div className="flex flex-col gap-1.5">
+                <label className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted">그림자</span>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(node.boxShadow)}
+                    onChange={(e) =>
+                      e.target.checked
+                        ? updateNodeShadow(selectedId, {})
+                        : clearNodeShadow(selectedId)
+                    }
+                  />
+                </label>
+                {node.boxShadow && (
+                  <>
+                    <div className="grid grid-cols-4 gap-1">
+                      {SHADOW_FIELDS.map((f) => (
+                        <div key={f.key} className="flex flex-col items-center gap-0.5">
+                          <input
+                            type="number"
+                            title={f.label}
+                            className="h-8 w-full rounded-button border border-line px-1 text-center text-xs focus:border-brand focus:outline-none"
+                            value={node.boxShadow![f.key]}
+                            onChange={(e) =>
+                              updateNodeShadow(selectedId, {
+                                [f.key]: e.target.value === "" ? 0 : Number(e.target.value),
+                              } as Partial<ShadowSpec>)
+                            }
+                          />
+                          <span className="text-[10px] text-muted">{f.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        className="h-9 w-10 rounded-button border border-line"
+                        value={node.boxShadow.color || "#000000"}
+                        onChange={(e) => updateNodeShadow(selectedId, { color: e.target.value })}
+                      />
+                      <label className="flex flex-1 items-center gap-1 text-xs text-muted">
+                        투명도
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          className={inputCls}
+                          value={Math.round(node.boxShadow.opacity * 100)}
+                          onChange={(e) =>
+                            updateNodeShadow(selectedId, {
+                              opacity:
+                                Math.max(0, Math.min(100, Number(e.target.value) || 0)) / 100,
+                            })
+                          }
+                        />
+                        %
+                      </label>
+                    </div>
+                  </>
+                )}
+              </div>
               {def.isContainer && (
                 <SidesField
                   label="패딩"

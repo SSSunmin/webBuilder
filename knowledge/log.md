@@ -2,6 +2,13 @@
 
 OKF 번들의 변경 이력. 최신 항목이 위. `/okf` 실행 시 knowledge-curator가 여기에 기록한다.
 
+## 2026-06-22 (버튼 아이콘·호버·그림자·부모 정렬)
+
+- `registry/component-registry.md`: 신규 아이콘 레지스트리(`src/registry/icons.ts`)·`PropControl "icon"`·Button props(icon/iconSize/hoverBg/hoverText)·Button 호버 방식 섹션 추가, resource/tags 갱신.
+- `data-model/page-node.md`: `PageNode.boxShadow?: ShadowSpec`(픽셀 단위 x/y/blur/spread/color/opacity, 프리셋 아님)·`shadowCss`·`DEFAULT_SHADOW`, PropSchema control에 `"icon"` 추가.
+- `store/editor-store.md`: `updateNodeShadow`/`clearNodeShadow`·`centerInParent` 액션, `findParentChild`/`sameParent` 헬퍼와 AlignToolbar 연동 설명.
+- `export/export-format.md`: frameSummary에 `shadow`·iconSize 생략 규칙, frameStyle에 `boxShadow`·Button prop 전달.
+
 ## 2026-06-22 (프로젝트 JSON import/export)
 
 - `storage/storage-layer.md` "JSON import/export" 섹션을 stale 메모(미확인)에서 실제 구현으로 갱신: `src/storage/projectFile.ts`(serialize/parse·검증/prepareImport), `src/lib/download.ts`(slugify·downloadFile), BuilderHeader "JSON ↓" 내보내기, Home "가져오기" 흐름·검증 범위·id 정책 문서화. frontmatter resource/tags 갱신.

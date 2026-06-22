@@ -1,6 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { ZERO_SIDES, resolveFrame, resolveHidden, toSides } from "./page";
+import { DEFAULT_SHADOW, ZERO_SIDES, resolveFrame, resolveHidden, shadowCss, toSides } from "./page";
 import type { PageNode } from "./page";
+
+describe("shadowCss", () => {
+  it("returns undefined for no shadow", () => {
+    expect(shadowCss(undefined)).toBeUndefined();
+  });
+
+  it("builds a CSS box-shadow with rgba from hex + opacity", () => {
+    expect(shadowCss(DEFAULT_SHADOW)).toBe("0px 4px 12px 0px rgba(0, 0, 0, 0.15)");
+  });
+
+  it("expands shorthand hex and applies offsets/spread", () => {
+    expect(
+      shadowCss({ x: 2, y: 3, blur: 5, spread: 1, color: "#f00", opacity: 1 }),
+    ).toBe("2px 3px 5px 1px rgba(255, 0, 0, 1)");
+  });
+
+  it("clamps opacity and floors blur at zero", () => {
+    expect(
+      shadowCss({ x: 0, y: 0, blur: -5, spread: 0, color: "#000000", opacity: 2 }),
+    ).toBe("0px 0px 0px 0px rgba(0, 0, 0, 1)");
+  });
+
+  it("falls back to black on an invalid/empty hex and drops alpha from 8-digit hex", () => {
+    const base = { x: 0, y: 0, blur: 0, spread: 0, opacity: 1 };
+    expect(shadowCss({ ...base, color: "" })).toContain("rgba(0, 0, 0, 1)");
+    expect(shadowCss({ ...base, color: "#gg0000" })).toContain("rgba(0, 0, 0, 1)");
+    expect(shadowCss({ ...base, color: "#ff000080" })).toContain("rgba(255, 0, 0, 1)");
+  });
+});
 
 /** Minimal node with a base frame and optional overrides for resolver tests. */
 function makeNode(overrides?: PageNode["overrides"]): PageNode {

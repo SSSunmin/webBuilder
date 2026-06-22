@@ -55,12 +55,28 @@ interface PageNode {
   frame: NodeFrame;      // 부모 박스 기준 절대 좌표·크기
   background?: string;   // CSS 색상 문자열
   borderRadius?: number; // px
+  boxShadow?: ShadowSpec; // 픽셀 그림자 {x,y,blur,spread,color,opacity}; 없음=undefined
   padding?: Sides;       // 내부 패딩 (children snap 기준)
   margin?: Sides;        // 외부 마진 (siblings snap 시 간격 확보)
   overrides?: Partial<Record<Exclude<BreakpointId, "desktop">, NodeOverride>>;
   events?: EventBinding[];
 }
 ```
+
+## ShadowSpec — 픽셀 그림자
+
+```ts
+interface ShadowSpec {
+  x: number;       // X 오프셋(px)
+  y: number;       // Y 오프셋(px)
+  blur: number;    // 흐림(px, ≥0)
+  spread: number;  // 확산(px)
+  color: string;   // hex (#rgb/#rrggbb)
+  opacity: number; // 0~1
+}
+```
+
+프리셋(약/중/강)이 아니라 **픽셀 단위**로 직접 조절한다. `shadowCss(spec)`가 `"Xpx Ypx blurpx spreadpx rgba(r,g,b,a)"` CSS 값을 만든다(color hex → rgb, opacity → alpha). `DEFAULT_SHADOW`(0/4/12/0 #000000 0.15)는 그림자를 처음 켤 때 시작값. `undefined`면 그림자 없음. NodeView·`code.ts`·`spec.ts` 모두 `shadowCss`를 거친다.
 
 ## NodeFrame — 위치·크기
 
@@ -151,8 +167,8 @@ interface EventBinding {
 interface PropSchema {
   key: string;
   label: string;
-  control: "text" | "number" | "select" | "boolean" | "color";
-  options?: string[];  // select 전용
+  control: "text" | "number" | "select" | "boolean" | "color" | "icon";
+  options?: string[];  // select 전용 ("icon"은 icons.ts의 iconDefs 사용)
   default: unknown;
 }
 

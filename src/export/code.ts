@@ -1,6 +1,6 @@
 import { getComponentDef } from "../registry";
 import type { PageDocument, PageNode, Sides } from "../types/page";
-import { toSides } from "../types/page";
+import { shadowCss, toSides } from "../types/page";
 import { TRIGGER_PROP, actionBody, actionNeedsEvent } from "../types/events";
 
 function indentBlock(code: string, spaces: number): string {
@@ -35,6 +35,8 @@ function frameStyle(node: PageNode, isRoot: boolean): string {
   if (node.background) parts.push(`background: "${node.background}"`);
   if (typeof node.borderRadius === "number")
     parts.push(`borderRadius: ${node.borderRadius}`);
+  const shadow = shadowCss(node.boxShadow);
+  if (shadow) parts.push(`boxShadow: "${shadow}"`);
   const padding = spacingValue(toSides(node.padding));
   if (padding !== null) parts.push(`padding: ${padding}`);
   // Root keeps its "0 auto" centering margin; user margin applies elsewhere.

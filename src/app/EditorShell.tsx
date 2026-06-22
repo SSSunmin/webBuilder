@@ -178,9 +178,9 @@ export function EditorShell({ projectId }: EditorShellProps) {
         guideStore.clear();
       }}
     >
-      <div className="grid min-h-screen grid-rows-[auto_1fr] bg-canvas text-ink">
+      <div className="grid min-h-screen grid-rows-[auto_1fr] bg-canvas text-ink lg:h-screen lg:grid-rows-[auto_minmax(0,1fr)] lg:overflow-hidden">
         <BuilderHeader projectId={projectId} />
-        <div className="grid min-h-0 grid-cols-1 gap-3 p-3 lg:grid-cols-[260px_minmax(0,1fr)_320px]">
+        <div className="grid min-h-0 grid-cols-1 gap-3 p-3 lg:grid-rows-1 lg:grid-cols-[260px_minmax(0,1fr)_320px]">
           <PalettePane />
           <CanvasPane />
           <aside className="grid min-h-[420px] grid-rows-2 gap-3 lg:min-h-0">

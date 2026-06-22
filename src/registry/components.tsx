@@ -1,5 +1,27 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { ComponentDef } from "../types/component";
+import { getIcon } from "./icons";
+
+/** Inline SVG for a predefined icon at a pixel size. Inherits color from the
+ * surrounding text (stroke="currentColor"). Markup is trusted (authored in
+ * icons.ts), so dangerouslySetInnerHTML is safe. Kept as a plain factory (not a
+ * component) so this module still only exports `componentDefs`. */
+function iconGlyph(svg: string, size: number): ReactNode {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={size}
+      height={size}
+      className="shrink-0"
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
+}
 
 // --- prop readers (props values are typed as unknown) ---
 const s = (v: unknown, d = ""): string => (typeof v === "string" ? v : d);
@@ -262,18 +284,47 @@ const definitions: ComponentDef[] = [
     props: [
       { key: "text", label: "텍스트", control: "text", default: "무료로 체험하기" },
       { key: "variant", label: "스타일", control: "select", options: ["primary", "ghost", "soft"], default: "primary" },
+      { key: "icon", label: "아이콘", control: "icon", default: "" },
+      { key: "iconSize", label: "아이콘 크기(px)", control: "number", default: 16 },
+      { key: "hoverBg", label: "호버 배경색", control: "color", default: "" },
+      { key: "hoverText", label: "호버 글자색", control: "color", default: "" },
     ],
-    render: (props) => (
-      <button
-        className={`h-full w-full rounded-button px-4 text-sm font-semibold transition ${
-          BUTTON_VARIANT[s(props.variant, "primary")] ?? BUTTON_VARIANT.primary
-        }`}
-      >
-        {s(props.text, "버튼")}
-      </button>
-    ),
-    toCode: (node) =>
-      `<Button${attr("variant", node.props.variant)}>${s(node.props.text, "버튼")}</Button>`,
+    render: (props) => {
+      const icon = getIcon(s(props.icon));
+      const iconSize = Math.max(8, num(props.iconSize, 16));
+      const hoverBg = s(props.hoverBg);
+      const hoverText = s(props.hoverText);
+      // Drive hover via CSS vars + literal arbitrary Tailwind classes so the
+      // canvas preview shows real :hover (render can't use hooks/JS state). The
+      // classes are only added when a color is set, so an unset value can't
+      // override the variant's default hover with an invalid var().
+      const style: Record<string, string> = {};
+      if (hoverBg) style["--btn-hover-bg"] = hoverBg;
+      if (hoverText) style["--btn-hover-text"] = hoverText;
+      const hoverCls = `${hoverBg ? "hover:!bg-[var(--btn-hover-bg)] " : ""}${
+        hoverText ? "hover:!text-[var(--btn-hover-text)] " : ""
+      }`;
+      return (
+        <button
+          style={style as CSSProperties}
+          className={`inline-flex h-full w-full items-center justify-center gap-2 rounded-button px-4 text-sm font-semibold transition ${
+            BUTTON_VARIANT[s(props.variant, "primary")] ?? BUTTON_VARIANT.primary
+          } ${hoverCls}`}
+        >
+          {icon && iconGlyph(icon.svg, iconSize)}
+          {s(props.text, "버튼")}
+        </button>
+      );
+    },
+    toCode: (node) => {
+      const iconAttrs = s(node.props.icon)
+        ? `${attr("icon", node.props.icon)}${attr("iconSize", node.props.iconSize)}`
+        : "";
+      return `<Button${attr("variant", node.props.variant)}${iconAttrs}${attr(
+        "hoverBg",
+        node.props.hoverBg,
+      )}${attr("hoverText", node.props.hoverText)}>${s(node.props.text, "버튼")}</Button>`;
+    },
   },
   {
     type: "Link",
