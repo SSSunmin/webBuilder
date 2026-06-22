@@ -88,6 +88,8 @@ export interface PageMeta {
   id: string;
   name: string;
   updatedAt: string;
+  /** SVG wireframe data URI for the home card preview. */
+  thumbnail?: string;
 }
 
 /**
