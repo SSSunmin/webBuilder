@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { listBlocks, listComponents } from "../registry";
 import type { ComponentDef } from "../types/component";
@@ -45,15 +46,39 @@ function groupByCategory(defs: ComponentDef[]): [string, ComponentDef[]][] {
 }
 
 export function PalettePane() {
-  const groups = groupByCategory(listComponents());
-  const blocks = listBlocks();
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  // Match on both the display label and the registry key/type.
+  const match = (label: string, key: string) =>
+    !q || label.toLowerCase().includes(q) || key.toLowerCase().includes(q);
+
+  const groups = groupByCategory(
+    listComponents().filter((d) => match(d.label, d.type)),
+  );
+  const blocks = listBlocks().filter((b) => match(b.label, b.key));
+  const empty = blocks.length === 0 && groups.length === 0;
+
   return (
     <aside className="flex min-h-0 flex-col overflow-hidden rounded-card border border-line bg-white shadow-card">
       <div className="border-b border-line px-4 py-2">
         <h2 className="text-sm font-semibold">팔레트</h2>
         <p className="mt-0.5 text-xs text-muted">드래그해서 캔버스에 추가</p>
       </div>
+      <div className="border-b border-line px-3 py-2">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="컴포넌트 검색"
+          className="h-8 w-full rounded-button border border-line bg-line2 px-2.5 text-sm text-ink placeholder:text-muted focus:border-brand-lightest focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+        />
+      </div>
       <div className="flex-1 overflow-auto p-3">
+        {empty && (
+          <p className="px-1 py-6 text-center text-xs text-muted">
+            "{query.trim()}"에 맞는 컴포넌트가 없습니다.
+          </p>
+        )}
         {blocks.length > 0 && (
           <div className="mb-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
