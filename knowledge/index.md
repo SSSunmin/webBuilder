@@ -30,7 +30,7 @@
 
 ### Export
 
-- [MD Export 형식](/export/export-format.md) — spec/code/both 모드, 명세서·코드 생성 규칙, 이벤트·override 출력
+- [MD Export 형식](/export/export-format.md) — spec/code/both 모드, 포터블 컨텍스트(서문+컴포넌트 범례), 명세서·코드 생성 규칙, 이벤트·override 출력
 
 ### 저장 계층
 
