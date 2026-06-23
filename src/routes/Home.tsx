@@ -26,10 +26,21 @@ export function Home() {
   const [modal, setModal] = useState<ModalState>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
-    setProjects(await storage.list());
+    try {
+      setLoadError(null);
+      setProjects(await storage.list());
+    } catch (err) {
+      // Auth expiry / network / RLS failure: surface it instead of leaving the
+      // page stuck on "불러오는 중…" forever. Keep the previous list (if any).
+      console.warn("프로젝트 목록 불러오기 실패:", err);
+      setLoadError(
+        "프로젝트 목록을 불러오지 못했습니다. 로그인이 만료되었거나 네트워크에 문제가 있을 수 있습니다.",
+      );
+    }
   }, []);
 
   useEffect(() => {
@@ -100,17 +111,26 @@ export function Home() {
       try {
         await storage.save(prepareImport(await local.load(meta.id)));
         imported += 1;
-      } catch {
+      } catch (err) {
         // Skip an unreadable/oversized project but keep importing the rest.
+        // Log the reason so a silent all-failure (e.g. auth expiry) is debuggable.
+        console.warn(`로컬 프로젝트 "${meta.name}"(${meta.id}) 가져오기 실패:`, err);
       }
     }
     await refresh();
     const failed = metas.length - imported;
-    setNotice(
-      failed > 0
-        ? `로컬 프로젝트 ${imported}개를 가져왔습니다. ${failed}개는 가져오지 못했습니다.`
-        : `로컬 프로젝트 ${imported}개를 가져왔습니다.`,
-    );
+    if (imported === 0) {
+      // Every save failed — almost always a backend problem, not bad data.
+      setImportError(
+        "로컬 프로젝트를 가져오지 못했습니다. 로그인이 만료되었거나 네트워크에 문제가 있을 수 있습니다.",
+      );
+    } else {
+      setNotice(
+        failed > 0
+          ? `로컬 프로젝트 ${imported}개를 가져왔습니다. ${failed}개는 가져오지 못했습니다.`
+          : `로컬 프로젝트 ${imported}개를 가져왔습니다.`,
+      );
+    }
   };
 
   const handleSignOut = async () => {
@@ -185,7 +205,20 @@ export function Home() {
           </p>
         )}
 
-        {projects === null ? (
+        {loadError ? (
+          <div
+            role="alert"
+            className="flex min-h-[360px] flex-col items-center justify-center gap-4 rounded-card border border-error/30 bg-error/5 p-8 text-center"
+          >
+            <p className="text-sm text-error">{loadError}</p>
+            <button
+              onClick={() => void refresh()}
+              className="inline-flex h-10 items-center justify-center rounded-button border border-line bg-white px-4 text-sm font-semibold text-brand transition hover:bg-brand-pale focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
+            >
+              다시 시도
+            </button>
+          </div>
+        ) : projects === null ? (
           <p className="py-12 text-center text-sm text-muted">불러오는 중…</p>
         ) : projects.length === 0 ? (
           <div className="flex min-h-[360px] items-center justify-center rounded-card border border-dashed border-brand-lightest bg-white p-8 text-center shadow-card">
