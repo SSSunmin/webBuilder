@@ -1,7 +1,7 @@
 import { getComponentDef } from "../registry";
 import type { PageDocument, PageNode, Sides } from "../types/page";
 import { shadowCss, toSides } from "../types/page";
-import { TRIGGER_PROP, actionBody, actionNeedsEvent } from "../types/events";
+import { TRIGGER_PROP, actionBody, actionNeedsEvent, safeComment } from "../types/events";
 
 function indentBlock(code: string, spaces: number): string {
   const pad = " ".repeat(spaces);
@@ -89,15 +89,21 @@ function renderNode(
   if (visited.has(nodeId)) return "";
   const node = doc.nodes[nodeId];
   if (!node) return "";
-  const def = getComponentDef(node.type);
-  if (!def) return "";
-
   visited.add(nodeId);
-  const childCodes = def.isContainer
+
+  const def = getComponentDef(node.type);
+  // Unknown type (imported JSON / swapped registry): keep the node and its
+  // subtree with a placeholder comment instead of silently dropping them.
+  // Treat unknown as a possible container so children are never lost.
+  const childCodes = (def?.isContainer ?? true)
     ? node.children.map((cid) => renderNode(doc, cid, false, visited)).filter(Boolean)
     : [];
   const childrenBlock = childCodes.join("\n");
-  const inner = def.toCode(node, indentBlock(childrenBlock, 2));
+  const inner = def
+    ? def.toCode(node, indentBlock(childrenBlock, 2))
+    : [`{/* unknown component: ${safeComment(node.type)} */}`, indentBlock(childrenBlock, 2)]
+        .filter(Boolean)
+        .join("\n");
 
   return `<div style=${frameStyle(node, isRoot)}${eventAttrs(node)}>\n${indentBlock(inner, 2)}\n</div>`;
 }

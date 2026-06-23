@@ -1,34 +1,56 @@
 import type { CSSProperties, ReactNode } from "react";
 import { getComponentDef } from "../registry";
 import { useEditorStore } from "../store/editorStore";
-import type { PageDocument } from "../types/page";
+import { BREAKPOINTS, resolveFrame, resolveHidden, shadowCss } from "../types/page";
+import type { BreakpointId, PageDocument } from "../types/page";
 
-/** Render the page cleanly (no editor chrome) with absolute positioning. */
-function renderNode(doc: PageDocument, nodeId: string, isRoot: boolean): ReactNode {
+/**
+ * Render the page cleanly (no editor chrome) for the active breakpoint, matching
+ * what the canvas (NodeView) shows: resolved frame, radius, shadow, and hidden
+ * nodes dropped from the output.
+ */
+function renderNode(
+  doc: PageDocument,
+  nodeId: string,
+  isRoot: boolean,
+  bp: BreakpointId,
+): ReactNode {
   const node = doc.nodes[nodeId];
   if (!node) return null;
   const def = getComponentDef(node.type);
   if (!def) return null;
+  // A node hidden at this breakpoint is not part of the rendered page.
+  if (resolveHidden(node, bp)) return null;
 
+  const frame = resolveFrame(node, bp);
   const children = def.isContainer
-    ? node.children.map((cid) => renderNode(doc, cid, false))
+    ? node.children.map((cid) => renderNode(doc, cid, false, bp))
     : undefined;
+
+  // Non-desktop narrows the root to the device width (mirrors NodeView).
+  const rootWidth =
+    bp === "desktop" ? frame.w : BREAKPOINTS.find((b) => b.id === bp)!.width;
+  const boxShadow = shadowCss(node.boxShadow);
 
   const style: CSSProperties = isRoot
     ? {
         position: "relative",
-        width: node.frame.w,
-        height: node.frame.h,
+        width: rootWidth,
+        height: frame.h,
         margin: "0 auto",
         background: node.background,
+        borderRadius: node.borderRadius,
+        boxShadow,
       }
     : {
         position: "absolute",
-        left: node.frame.x,
-        top: node.frame.y,
-        width: node.frame.w,
-        height: node.frame.h,
+        left: frame.x,
+        top: frame.y,
+        width: frame.w,
+        height: frame.h,
         background: node.background,
+        borderRadius: node.borderRadius,
+        boxShadow,
       };
 
   return (
@@ -40,6 +62,7 @@ function renderNode(doc: PageDocument, nodeId: string, isRoot: boolean): ReactNo
 
 export function PreviewModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const doc = useEditorStore((s) => s.document);
+  const bp = useEditorStore((s) => s.activeBreakpoint);
   if (!open || !doc) return null;
 
   return (
@@ -55,7 +78,7 @@ export function PreviewModal({ open, onClose }: { open: boolean; onClose: () => 
           </button>
         </div>
         <div className="flex-1 overflow-auto bg-line2/40 p-6" onClick={(e) => e.stopPropagation()}>
-          {renderNode(doc, doc.rootId, true)}
+          {renderNode(doc, doc.rootId, true, bp)}
         </div>
       </div>
     </div>

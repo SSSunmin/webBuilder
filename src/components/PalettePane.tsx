@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { listBlocks, listComponents } from "../registry";
 import type { ComponentDef } from "../types/component";
@@ -31,6 +32,34 @@ function BlockItem({ blockKey, label }: { blockKey: string; label: string }) {
   );
 }
 
+// Korean search aliases keyed by component type / block key. Palette labels are
+// English, so without these "버튼" wouldn't match "Button". Add a line here when
+// registering a new component/block (missing = English-only search for it).
+const KO_ALIASES: Record<string, string> = {
+  Layout: "레이아웃 컨테이너 박스 영역",
+  Card: "카드",
+  Section: "섹션 구역",
+  Sidebar: "사이드바 측면 메뉴",
+  Navbar: "네비게이션 내비 메뉴바 상단바",
+  Heading: "제목 헤딩 머리글 타이틀",
+  Text: "텍스트 본문 문단 글",
+  Button: "버튼 단추",
+  Link: "링크 연결",
+  Badge: "배지 뱃지 라벨",
+  Avatar: "아바타 프로필 사진",
+  TagList: "태그 목록 태그리스트",
+  Image: "이미지 그림 사진",
+  Divider: "구분선 선",
+  Stat: "통계 지표 수치 스탯",
+  ProgressBar: "진행바 프로그레스 게이지",
+  Chart: "차트 그래프",
+  Form: "폼 양식 입력폼",
+  Input: "입력 인풋 필드 입력창",
+  header: "헤더 머리말 상단",
+  hero: "히어로 대문 배너 메인",
+  footer: "푸터 바닥글 하단",
+};
+
 function groupByCategory(defs: ComponentDef[]): [string, ComponentDef[]][] {
   const order: string[] = [];
   const map = new Map<string, ComponentDef[]>();
@@ -45,15 +74,42 @@ function groupByCategory(defs: ComponentDef[]): [string, ComponentDef[]][] {
 }
 
 export function PalettePane() {
-  const groups = groupByCategory(listComponents());
-  const blocks = listBlocks();
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  // Match on the display label, the registry key/type, and Korean aliases.
+  const match = (label: string, key: string) =>
+    !q ||
+    label.toLowerCase().includes(q) ||
+    key.toLowerCase().includes(q) ||
+    (KO_ALIASES[key]?.includes(q) ?? false);
+
+  const groups = groupByCategory(
+    listComponents().filter((d) => match(d.label, d.type)),
+  );
+  const blocks = listBlocks().filter((b) => match(b.label, b.key));
+  const empty = blocks.length === 0 && groups.length === 0;
+
   return (
     <aside className="flex min-h-0 flex-col overflow-hidden rounded-card border border-line bg-white shadow-card">
       <div className="border-b border-line px-4 py-2">
         <h2 className="text-sm font-semibold">팔레트</h2>
         <p className="mt-0.5 text-xs text-muted">드래그해서 캔버스에 추가</p>
       </div>
+      <div className="border-b border-line px-3 py-2">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="컴포넌트 검색"
+          className="h-8 w-full rounded-button border border-line bg-line2 px-2.5 text-sm text-ink placeholder:text-muted focus:border-brand-lightest focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+        />
+      </div>
       <div className="flex-1 overflow-auto p-3">
+        {empty && (
+          <p className="px-1 py-6 text-center text-xs text-muted">
+            "{query.trim()}"에 맞는 컴포넌트가 없습니다.
+          </p>
+        )}
         {blocks.length > 0 && (
           <div className="mb-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
