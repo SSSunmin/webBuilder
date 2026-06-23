@@ -32,6 +32,34 @@ function BlockItem({ blockKey, label }: { blockKey: string; label: string }) {
   );
 }
 
+// Korean search aliases keyed by component type / block key. Palette labels are
+// English, so without these "버튼" wouldn't match "Button". Add a line here when
+// registering a new component/block (missing = English-only search for it).
+const KO_ALIASES: Record<string, string> = {
+  Layout: "레이아웃 컨테이너 박스 영역",
+  Card: "카드",
+  Section: "섹션 구역",
+  Sidebar: "사이드바 측면 메뉴",
+  Navbar: "네비게이션 내비 메뉴바 상단바",
+  Heading: "제목 헤딩 머리글 타이틀",
+  Text: "텍스트 본문 문단 글",
+  Button: "버튼 단추",
+  Link: "링크 연결",
+  Badge: "배지 뱃지 라벨",
+  Avatar: "아바타 프로필 사진",
+  TagList: "태그 목록 태그리스트",
+  Image: "이미지 그림 사진",
+  Divider: "구분선 선",
+  Stat: "통계 지표 수치 스탯",
+  ProgressBar: "진행바 프로그레스 게이지",
+  Chart: "차트 그래프",
+  Form: "폼 양식 입력폼",
+  Input: "입력 인풋 필드 입력창",
+  header: "헤더 머리말 상단",
+  hero: "히어로 대문 배너 메인",
+  footer: "푸터 바닥글 하단",
+};
+
 function groupByCategory(defs: ComponentDef[]): [string, ComponentDef[]][] {
   const order: string[] = [];
   const map = new Map<string, ComponentDef[]>();
@@ -48,9 +76,12 @@ function groupByCategory(defs: ComponentDef[]): [string, ComponentDef[]][] {
 export function PalettePane() {
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
-  // Match on both the display label and the registry key/type.
+  // Match on the display label, the registry key/type, and Korean aliases.
   const match = (label: string, key: string) =>
-    !q || label.toLowerCase().includes(q) || key.toLowerCase().includes(q);
+    !q ||
+    label.toLowerCase().includes(q) ||
+    key.toLowerCase().includes(q) ||
+    (KO_ALIASES[key]?.includes(q) ?? false);
 
   const groups = groupByCategory(
     listComponents().filter((d) => match(d.label, d.type)),
