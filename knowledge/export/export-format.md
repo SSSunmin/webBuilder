@@ -1,10 +1,10 @@
 ---
 type: Reference
 title: MD Export 형식
-description: generateMarkdown의 세 가지 모드(spec/code/both), 명세서 트리 직렬화 방식, React 코드 생성 방식, 이벤트·override 출력 규칙.
-resource: src/export/index.ts, src/export/spec.ts, src/export/code.ts
-tags: [export, markdown, spec, code, events]
-timestamp: 2026-06-22
+description: generateMarkdown의 세 가지 모드(spec/code/both), 모든 모드 앞에 붙는 포터블 컨텍스트(서문+컴포넌트 범례), 명세서 트리 직렬화 방식, React 코드 생성 방식, 이벤트·override 출력 규칙.
+resource: src/export/index.ts, src/export/spec.ts, src/export/code.ts, src/export/legend.ts
+tags: [export, markdown, spec, code, events, portable, legend]
+timestamp: 2026-06-23
 ---
 
 # MD Export 형식
@@ -24,8 +24,22 @@ const EXPORT_MODE_LABELS: Record<ExportMode, string> = {
 };
 
 function generateMarkdown(doc: PageDocument, mode: ExportMode): string
-// "both" → `${spec}\n---\n\n${code}`
+// 모든 모드 = `${generateContext(doc)}\n---\n\n${modeBody}`
+// modeBody: spec | code | `${spec}\n---\n\n${code}`(both)
 ```
+
+## (0) 포터블 컨텍스트 — `generateContext` (`legend.ts`)
+
+**모든 모드의 본문 앞에** 붙는 자기완결·제공자 중립(특정 LLM 비언급) 머리말. 산출물을 이 코드베이스 밖으로 가져가도 임의의 LLM·개발자가 페이지를 구현할 수 있게 한다.
+
+구성:
+1. **읽는 법 서문** — blockquote. 좌표계(고정폭 루트 + 절대 px, `@(x,y) w×h`), 들여쓰기=중첩, `(container)`만 자식, 태블릿/모바일 override·`숨김`, `이벤트:`, 색상/간격 단위·`T/R/B/L`, `import ... from "./components"`는 예시 경로라는 고지. 첫 줄에 `doc.meta.name`을 넣는다.
+2. **`## 사용 컴포넌트` 범례** — 페이지가 **실제 쓰는** 타입만(루트부터 pre-order, 중복 1회, cyclic 방어 `visited`). 각 항목:
+   - `### <label> (\`<type>\`)` + 컨테이너/리프 한 줄
+   - props가 있으면 `| 속성 | 설명 | 타입 | 기본값 |` 표. 타입은 control 한글화(text→문자열…), select는 `선택(a \| b)`(파이프 이스케이프). 기본값은 빈값이면 `—`, 문자열이면 따옴표.
+   - `코드 형태: \`<...>\`` — `def.toCode(sampleNode, 컨테이너면 " …")`를 한 줄로 접어 JSX 계약 예시 제공.
+
+타입 추출·범례는 `getComponentDef`로 조회하므로 `hidden` 컴포넌트(레거시 Header/Hero/Footer)도 저장 문서가 쓰면 정상 출력된다.
 
 ## (A) 명세서 모드 — `generateSpec` (`spec.ts`)
 
@@ -132,5 +146,5 @@ function generateCodeMarkdown(doc): string
 # 관련 개념
 
 - [/data-model/page-node.md](/data-model/page-node.md) — EventBinding, NodeOverride 타입
-- [/registry/component-registry.md](/registry/component-registry.md) — toCode() 구현 위치
+- [/registry/component-registry.md](/registry/component-registry.md) — toCode()·PropSchema 구현 위치(범례 소스)
 - [/overview/project.md](/overview/project.md) — Export vs 저장 구분

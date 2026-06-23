@@ -1,5 +1,6 @@
 import type { PageDocument } from "../types/page";
 import { generateCodeMarkdown } from "./code";
+import { generateContext } from "./legend";
 import { generateSpec } from "./spec";
 
 export type ExportMode = "spec" | "code" | "both";
@@ -10,8 +11,8 @@ export const EXPORT_MODE_LABELS: Record<ExportMode, string> = {
   both: "둘 다",
 };
 
-/** Build the markdown export for a document in the requested mode. */
-export function generateMarkdown(doc: PageDocument, mode: ExportMode): string {
+/** Body markdown for a mode, without the portable context preamble. */
+function modeBody(doc: PageDocument, mode: ExportMode): string {
   const spec = generateSpec(doc);
   const code = generateCodeMarkdown(doc);
   switch (mode) {
@@ -24,5 +25,15 @@ export function generateMarkdown(doc: PageDocument, mode: ExportMode): string {
   }
 }
 
+/**
+ * Build the markdown export for a document in the requested mode. Every mode is
+ * prefixed with a portable, provider-neutral context (reading guide + component
+ * legend) so the output is self-contained outside this codebase.
+ */
+export function generateMarkdown(doc: PageDocument, mode: ExportMode): string {
+  return `${generateContext(doc)}\n---\n\n${modeBody(doc, mode)}`;
+}
+
 export { generateSpec } from "./spec";
 export { generateCode, generateCodeMarkdown } from "./code";
+export { generateContext } from "./legend";

@@ -8,6 +8,10 @@ OKF 번들의 변경 이력. 최신 항목이 위. `/okf` 실행 시 knowledge-c
 - `auth/auth-layer.md`(신규): `AuthClient` 추상화, `SupabaseAuthClient`, `AuthProvider`/`useAuth`(onChange 우선 초기화로 경쟁 상태 방지), `RequireAuth` 게이트, `Login`, 멀티유저 격리(RLS), env 설정.
 - Supabase SDK는 `lib/supabaseClient.ts`·`storage/SupabaseStorageAdapter.ts`·`auth/supabaseAuthClient.ts` 3곳에만 격리. `index.md` 목차에 인증 섹션 추가. (이슈 #12)
 
+## 2026-06-23 (Export 포터블화 — 컨텍스트 서문+컴포넌트 범례)
+
+- `export/export-format.md`: 신규 "(0) 포터블 컨텍스트 — `generateContext`(`legend.ts`)" 섹션 추가. 모든 모드 본문 앞에 제공자 중립 읽는 법 서문 + `## 사용 컴포넌트` 범례(props 표·control 한글화·select 파이프 이스케이프·`코드 형태` toCode 예시)를 붙인다. `generateMarkdown` 공식·resource·tags·frontmatter 갱신. 목적: 코드베이스 밖의 임의 LLM/개발자가 산출물만으로 페이지 구현 가능(이슈 #11).
+
 ## 2026-06-22 (버튼 아이콘·호버·그림자·부모 정렬)
 
 - `registry/component-registry.md`: 신규 아이콘 레지스트리(`src/registry/icons.ts`)·`PropControl "icon"`·Button props(icon/iconSize/hoverBg/hoverText)·Button 호버 방식 섹션 추가, resource/tags 갱신.
