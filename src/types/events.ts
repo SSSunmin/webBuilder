@@ -67,7 +67,7 @@ export function actionNeedsEvent(action: ActionType): boolean {
 
 /** Break the comment-closing sequence so user text embedded in a JS comment
  * can't terminate it early (and inject code into the exported source). */
-function safeComment(s: string): string {
+export function safeComment(s: string): string {
   return s.replace(/\*\//g, "* /");
 }
 

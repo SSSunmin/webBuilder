@@ -339,6 +339,41 @@ describe("boxShadow export", () => {
   });
 });
 
+describe("unknown component type", () => {
+  /** A root Layout containing a node whose type was corrupted to an unknown key. */
+  function docWithUnknown() {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Unknown");
+    const id = useEditorStore.getState().addNode(doc.rootId, "Card")!;
+    useEditorStore.getState().addNode(id, "Button"); // child that must survive
+    const d = useEditorStore.getState().document!;
+    return {
+      ...d,
+      nodes: { ...d.nodes, [id]: { ...d.nodes[id], type: "Mystery" } },
+    };
+  }
+
+  it("emits a placeholder comment and preserves the subtree instead of dropping it", () => {
+    const code = generateCode(docWithUnknown());
+    expect(code).toContain("{/* unknown component: Mystery */}");
+    expect(code).toContain("<Button"); // the child is not silently lost
+  });
+
+  it("neutralizes a comment-closing sequence in an unknown type name", () => {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Inject");
+    const id = useEditorStore.getState().addNode(doc.rootId, "Card")!;
+    const d = useEditorStore.getState().document!;
+    const corrupted = {
+      ...d,
+      nodes: { ...d.nodes, [id]: { ...d.nodes[id], type: "a*/alert(1)//" } },
+    };
+    const code = generateCode(corrupted);
+    expect(code).not.toContain("*/alert(1)");
+    expect(code).toContain("unknown component:");
+  });
+});
+
 describe("cyclic children defense", () => {
   /** Build a document whose two nodes reference each other as children. */
   function cyclicDoc() {
