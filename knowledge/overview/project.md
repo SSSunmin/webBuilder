@@ -19,10 +19,10 @@ timestamp: 2026-06-22
 |---|---|---|
 | 목적 | 작업 내용 보존, 나중에 이어서 작업 | AI·개발자에게 넘길 산출물(MD) 생성 |
 | 대상 | PageDocument 전체 | 명세서 / React 코드 / 둘 다 |
-| 결과 | localStorage에 영속, 홈 목록에 반영 | `.md` 파일 다운로드 |
-| 구현 | `StorageAdapter` (`LocalStorageAdapter`) | `export/` 모듈 (`generateSpec` / `generateCode`) |
+| 결과 | localStorage 또는 Supabase에 영속, 홈 목록에 반영 | `.md` 파일 다운로드 |
+| 구현 | `StorageAdapter` (`LocalStorageAdapter` / `SupabaseStorageAdapter`) | `export/` 모듈 (`generateSpec` / `generateCode`) |
 
-**자체 DB 없음** — 브라우저 localStorage에만 영속한다. 백엔드·데이터베이스가 없으므로 `database/` 개념은 이 번들에 없다. StorageAdapter 인터페이스가 추상화 경계이며, 추후 `ApiStorageAdapter`로 구현체를 교체하면 백엔드 승격이 가능하다.
+**저장 백엔드는 env로 선택** — Supabase 키가 있으면 백엔드(Postgres) 영속 + 이메일/비밀번호 인증·멀티유저(RLS), 없으면 브라우저 localStorage 전용(인증 없음). `StorageAdapter`/`AuthClient` 인터페이스가 추상화 경계이며, 자체 서버로 승격하려면 `ApiStorageAdapter`/`ApiAuthClient`를 추가하고 싱글톤만 교체한다. 상세: [/storage/storage-layer.md](/storage/storage-layer.md), [/auth/auth-layer.md](/auth/auth-layer.md).
 
 ## 기술 스택
 

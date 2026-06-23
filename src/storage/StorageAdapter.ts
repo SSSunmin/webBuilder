@@ -12,7 +12,7 @@ export interface StorageAdapter {
   load(id: string): Promise<PageDocument>;
   /** Persist a project. Updates meta.updatedAt. */
   save(doc: PageDocument): Promise<void>;
-  /** Delete a project. */
+  /** Delete a project. A missing id is a no-op (not an error). */
   remove(id: string): Promise<void>;
   /** Duplicate a project, returning the new project's meta. */
   duplicate(id: string): Promise<PageMeta>;

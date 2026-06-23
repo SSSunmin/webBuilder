@@ -2,6 +2,12 @@
 
 OKF 번들의 변경 이력. 최신 항목이 위. `/okf` 실행 시 knowledge-curator가 여기에 기록한다.
 
+## 2026-06-23 (백엔드 승격 — Supabase 영속·인증·멀티유저)
+
+- `storage/storage-layer.md`: env 기반 어댑터 선택(`backendConfig.backendEnabled`), `SupabaseStorageAdapter`(projects 테이블·RLS·onConflict upsert), `InMemoryStorageAdapter` + `adapterContract` 공유 계약 테스트, "로컬→백엔드 가져오기", 자체 서버 승격 경로 추가. frontmatter resource/tags 갱신.
+- `auth/auth-layer.md`(신규): `AuthClient` 추상화, `SupabaseAuthClient`, `AuthProvider`/`useAuth`(onChange 우선 초기화로 경쟁 상태 방지), `RequireAuth` 게이트, `Login`, 멀티유저 격리(RLS), env 설정.
+- Supabase SDK는 `lib/supabaseClient.ts`·`storage/SupabaseStorageAdapter.ts`·`auth/supabaseAuthClient.ts` 3곳에만 격리. `index.md` 목차에 인증 섹션 추가. (이슈 #12)
+
 ## 2026-06-22 (버튼 아이콘·호버·그림자·부모 정렬)
 
 - `registry/component-registry.md`: 신규 아이콘 레지스트리(`src/registry/icons.ts`)·`PropControl "icon"`·Button props(icon/iconSize/hoverBg/hoverText)·Button 호버 방식 섹션 추가, resource/tags 갱신.

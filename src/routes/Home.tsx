@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { TextPromptModal } from "../components/TextPromptModal";
-import { storage } from "../storage";
+import { storage, LocalStorageAdapter } from "../storage";
 import { ProjectFileError, parseProject, prepareImport } from "../storage/projectFile";
 import { createDocument } from "../store/editorStore";
+import { backendEnabled } from "../lib/backendConfig";
+import { useAuth } from "../auth/AuthContext";
 import type { PageMeta } from "../types/page";
 
 type ModalState =
@@ -19,13 +21,26 @@ function formatDate(iso: string): string {
 
 export function Home() {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const [projects, setProjects] = useState<PageMeta[] | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
-    setProjects(await storage.list());
+    try {
+      setLoadError(null);
+      setProjects(await storage.list());
+    } catch (err) {
+      // Auth expiry / network / RLS failure: surface it instead of leaving the
+      // page stuck on "불러오는 중…" forever. Keep the previous list (if any).
+      console.warn("프로젝트 목록 불러오기 실패:", err);
+      setLoadError(
+        "프로젝트 목록을 불러오지 못했습니다. 로그인이 만료되었거나 네트워크에 문제가 있을 수 있습니다.",
+      );
+    }
   }, []);
 
   useEffect(() => {
@@ -78,6 +93,51 @@ export function Home() {
     }
   };
 
+  // Migrate projects saved in this browser's localStorage into the backend.
+  // Each becomes a NEW backend project (fresh id), so it never overwrites and
+  // re-running just makes copies.
+  const handleImportLocal = async () => {
+    setImportError(null);
+    setNotice(null);
+    const local = new LocalStorageAdapter();
+    const metas = await local.list();
+    if (metas.length === 0) {
+      setNotice("이 브라우저에 가져올 로컬 프로젝트가 없습니다.");
+      return;
+    }
+    if (!window.confirm(`로컬 프로젝트 ${metas.length}개를 내 계정으로 가져올까요?`)) return;
+    let imported = 0;
+    for (const meta of metas) {
+      try {
+        await storage.save(prepareImport(await local.load(meta.id)));
+        imported += 1;
+      } catch (err) {
+        // Skip an unreadable/oversized project but keep importing the rest.
+        // Log the reason so a silent all-failure (e.g. auth expiry) is debuggable.
+        console.warn(`로컬 프로젝트 "${meta.name}"(${meta.id}) 가져오기 실패:`, err);
+      }
+    }
+    await refresh();
+    const failed = metas.length - imported;
+    if (imported === 0) {
+      // Every save failed — almost always a backend problem, not bad data.
+      setImportError(
+        "로컬 프로젝트를 가져오지 못했습니다. 로그인이 만료되었거나 네트워크에 문제가 있을 수 있습니다.",
+      );
+    } else {
+      setNotice(
+        failed > 0
+          ? `로컬 프로젝트 ${imported}개를 가져왔습니다. ${failed}개는 가져오지 못했습니다.`
+          : `로컬 프로젝트 ${imported}개를 가져왔습니다.`,
+      );
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/login", { replace: true });
+  };
+
   return (
     <main className="min-h-screen bg-canvas px-6 py-8 text-ink">
       <section className="mx-auto flex max-w-5xl flex-col gap-8">
@@ -85,6 +145,9 @@ export function Home() {
           <div>
             <p className="text-sm font-medium text-brand">webBuilder</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-normal">프로젝트</h1>
+            {backendEnabled && user?.email && (
+              <p className="mt-1 text-xs text-muted">{user.email}</p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -94,12 +157,21 @@ export function Home() {
               onChange={handleImportFile}
               className="hidden"
             />
+            {backendEnabled && (
+              <button
+                onClick={handleImportLocal}
+                title="이 브라우저에 저장된 로컬 프로젝트를 내 계정으로 가져오기"
+                className="inline-flex h-10 items-center justify-center rounded-button border border-line bg-white px-4 text-sm font-semibold text-brand transition hover:bg-brand-pale focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
+              >
+                로컬 가져오기
+              </button>
+            )}
             <button
               onClick={() => fileInputRef.current?.click()}
               title="프로젝트 .json 파일을 새 프로젝트로 가져오기"
               className="inline-flex h-10 items-center justify-center rounded-button border border-line bg-white px-4 text-sm font-semibold text-brand transition hover:bg-brand-pale focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
             >
-              가져오기
+              파일 가져오기
             </button>
             <button
               onClick={() => setModal({ mode: "create" })}
@@ -107,6 +179,14 @@ export function Home() {
             >
               새 프로젝트
             </button>
+            {backendEnabled && (
+              <button
+                onClick={handleSignOut}
+                className="inline-flex h-10 items-center justify-center rounded-button border border-line bg-white px-4 text-sm font-semibold text-muted transition hover:bg-line2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
+              >
+                로그아웃
+              </button>
+            )}
           </div>
         </header>
 
@@ -119,7 +199,26 @@ export function Home() {
           </p>
         )}
 
-        {projects === null ? (
+        {notice && (
+          <p className="-mt-4 rounded-card border border-brand-lightest bg-brand-pale px-4 py-2 text-sm text-brand">
+            {notice}
+          </p>
+        )}
+
+        {loadError ? (
+          <div
+            role="alert"
+            className="flex min-h-[360px] flex-col items-center justify-center gap-4 rounded-card border border-error/30 bg-error/5 p-8 text-center"
+          >
+            <p className="text-sm text-error">{loadError}</p>
+            <button
+              onClick={() => void refresh()}
+              className="inline-flex h-10 items-center justify-center rounded-button border border-line bg-white px-4 text-sm font-semibold text-brand transition hover:bg-brand-pale focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
+            >
+              다시 시도
+            </button>
+          </div>
+        ) : projects === null ? (
           <p className="py-12 text-center text-sm text-muted">불러오는 중…</p>
         ) : projects.length === 0 ? (
           <div className="flex min-h-[360px] items-center justify-center rounded-card border border-dashed border-brand-lightest bg-white p-8 text-center shadow-card">

@@ -34,7 +34,11 @@
 
 ### 저장 계층
 
-- [저장 계층 (StorageAdapter)](/storage/storage-layer.md) — 인터페이스, LocalStorageAdapter, localStorage 키 구조, 썸네일 생성(generateThumbnail)·quota fallback
+- [저장 계층 (StorageAdapter)](/storage/storage-layer.md) — 인터페이스, env 기반 어댑터 선택(Local/Supabase/InMemory), Supabase 영속·RLS, 공유 계약 테스트, localStorage 키 구조, 썸네일 생성·quota fallback, 자체 서버 승격 경로
+
+### 인증
+
+- [인증 계층 (AuthClient)](/auth/auth-layer.md) — 이메일/비밀번호 인증·멀티유저, AuthClient 추상화·Supabase 구현, AuthProvider/useAuth, RequireAuth 게이트, backendEnabled 분기
 
 ### 반응형
 
