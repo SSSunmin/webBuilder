@@ -121,19 +121,21 @@ describe("generateSpec", () => {
 });
 
 describe("generateCode", () => {
-  it("emits a Page component wrapped in positioned divs", () => {
+  it("emits a Page component with a stylesheet and classed divs", () => {
     const { document } = buildDoc();
     const code = generateCode(document);
     expect(code).toContain("export function Page()");
-    expect(code).toContain('position: "relative"'); // root frame
-    expect(code).toContain('position: "absolute"'); // child frame
+    expect(code).toContain("<style>{`");
+    expect(code).toContain('<div className="pg-0">'); // root wrapper
+    expect(code).toContain("position: relative"); // root frame (base rule)
+    expect(code).toContain("position: absolute"); // child frame (base rule)
   });
 
-  it("inlines the background color into the style literal", () => {
+  it("puts the background color into the node's CSS rule", () => {
     const { childId } = buildDoc();
     useEditorStore.getState().setNodeBackground(childId, "#123456");
     const code = generateCode(useEditorStore.getState().document!);
-    expect(code).toContain('background: "#123456"');
+    expect(code).toContain("background: #123456");
   });
 
   it("emits Text props as attributes, consistent with other components", () => {
@@ -163,15 +165,15 @@ describe("generateCode", () => {
     expect(code).toContain('style={{ color: "#ff0000" }}');
   });
 
-  it("emits uniform padding as a number and asymmetric margin as a shorthand string", () => {
+  it("emits uniform padding as a single px value and asymmetric margin as a shorthand", () => {
     const { childId } = buildDoc();
     useEditorStore.getState().updateNodeSpacing(childId, {
       padding: { top: 8, right: 8, bottom: 8, left: 8 },
       margin: { top: 8, right: 16, bottom: 24, left: 32 },
     });
     const code = generateCode(useEditorStore.getState().document!);
-    expect(code).toContain("padding: 8");
-    expect(code).toContain('margin: "8px 16px 24px 32px"');
+    expect(code).toContain("padding: 8px");
+    expect(code).toContain("margin: 8px 16px 24px 32px");
   });
 
   it("keeps the root centering margin even when the root has a user margin", () => {
@@ -181,9 +183,9 @@ describe("generateCode", () => {
       margin: { top: 12, right: 12, bottom: 12, left: 12 },
     });
     const code = generateCode(useEditorStore.getState().document!);
-    expect(code).toContain('margin: "0 auto"');
+    expect(code).toContain("margin: 0 auto");
     // The user's root margin must not leak into the generated code.
-    expect(code).not.toContain("margin: 12");
+    expect(code).not.toContain("margin: 12px");
   });
 
   it("omits padding and margin when all sides are zero", () => {
@@ -194,8 +196,62 @@ describe("generateCode", () => {
     });
     const code = generateCode(useEditorStore.getState().document!);
     expect(code).not.toContain("padding:");
-    expect(code).not.toContain("margin: 0");
-    expect(code).not.toContain('margin: "0px');
+    // A zero margin is omitted; only the root's "margin: 0 auto" remains.
+    expect(code).not.toContain("margin: 0px");
+  });
+});
+
+describe("responsive media queries", () => {
+  /** Build a doc and overwrite the child's overrides, returning the new code. */
+  function codeWithOverrides(overrides: object) {
+    const { document, childId } = buildDoc();
+    const doc = {
+      ...document,
+      nodes: {
+        ...document.nodes,
+        [childId]: { ...document.nodes[childId], overrides },
+      },
+    };
+    return generateCode(doc);
+  }
+
+  it("emits a tablet media query for a node with a tablet frame override", () => {
+    const code = codeWithOverrides({ tablet: { frame: { x: 10, w: 200 } } });
+    expect(code).toContain("@media (max-width: 768px)");
+    expect(code).toContain("left: 10px");
+    expect(code).toContain("width: 200px");
+  });
+
+  it("emits a mobile media query with display:none for a hidden node", () => {
+    const code = codeWithOverrides({ mobile: { hidden: true } });
+    expect(code).toContain("@media (max-width: 375px)");
+    expect(code).toContain("display: none");
+  });
+
+  it("re-shows at mobile (display:block) a node hidden at tablet", () => {
+    const code = codeWithOverrides({
+      tablet: { hidden: true },
+      mobile: { hidden: false },
+    });
+    // tablet block hides, mobile block (later → wins at 375px) re-shows.
+    expect(code).toContain("display: none");
+    expect(code).toContain("display: block");
+    expect(code.indexOf("max-width: 768px")).toBeLessThan(code.indexOf("max-width: 375px"));
+  });
+
+  it("emits no media query for a document without overrides (no regression)", () => {
+    const { document } = buildDoc();
+    const code = generateCode(document);
+    expect(code).not.toContain("@media");
+  });
+
+  it("escapes backticks/${ in a background value so the <style> literal can't be broken out of", () => {
+    const { childId } = buildDoc();
+    useEditorStore.getState().setNodeBackground(childId, "red`}</style><script>x</script>${y}");
+    const code = generateCode(useEditorStore.getState().document!);
+    // No raw backtick or ${ survives inside the generated source — both escaped.
+    expect(code).toContain("background: red\\`}</style><script>x</script>\\${y}");
+    expect(code).not.toContain("red`}");
   });
 });
 
@@ -326,7 +382,7 @@ describe("boxShadow export", () => {
     const id = useEditorStore.getState().addNode(doc.rootId, "Card")!;
     useEditorStore.getState().updateNodeShadow(id, {}); // default: 0,4,12,0 #000 0.15
     const code = generateCode(useEditorStore.getState().document!);
-    expect(code).toContain("boxShadow:");
+    expect(code).toContain("box-shadow:");
     expect(code).toContain("0px 4px 12px 0px rgba(0, 0, 0, 0.15)");
   });
 
@@ -335,7 +391,7 @@ describe("boxShadow export", () => {
     const doc = store.newDocument("NoShadow");
     useEditorStore.getState().addNode(doc.rootId, "Card");
     const code = generateCode(useEditorStore.getState().document!);
-    expect(code).not.toContain("boxShadow:");
+    expect(code).not.toContain("box-shadow:");
   });
 });
 

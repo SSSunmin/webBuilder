@@ -1,6 +1,6 @@
 import { getComponentDef } from "../registry";
-import type { PageDocument, PageNode, Sides } from "../types/page";
-import { shadowCss, toSides } from "../types/page";
+import type { BreakpointId, PageDocument, PageNode, Sides } from "../types/page";
+import { BREAKPOINTS, shadowCss, toSides } from "../types/page";
 import { TRIGGER_PROP, actionBody, actionNeedsEvent, safeComment } from "../types/events";
 
 function indentBlock(code: string, spaces: number): string {
@@ -11,40 +11,92 @@ function indentBlock(code: string, spaces: number): string {
     .join("\n");
 }
 
-/** Format a Sides as a CSS style value: omitted (null) when all zero, a number
- * when uniform (React adds px), or a "top right bottom left" px shorthand. */
-function spacingValue(sides: Sides): string | null {
+const BP_WIDTH = Object.fromEntries(BREAKPOINTS.map((b) => [b.id, b.width])) as Record<
+  BreakpointId,
+  number
+>;
+
+/** Format a Sides as a CSS spacing value: omitted (null) when all zero, a single
+ * px value when uniform, or a "top right bottom left" px shorthand. */
+function cssSpacing(sides: Sides): string | null {
   const { top, right, bottom, left } = sides;
   if (top === 0 && right === 0 && bottom === 0 && left === 0) return null;
-  if (top === right && right === bottom && bottom === left) return String(top);
-  return `"${top}px ${right}px ${bottom}px ${left}px"`;
+  if (top === right && right === bottom && bottom === left) return `${top}px`;
+  return `${top}px ${right}px ${bottom}px ${left}px`;
 }
 
-/** Inline style literal for a node's frame + background. */
-function frameStyle(node: PageNode, isRoot: boolean): string {
+/** Base (desktop) CSS declarations for a node's frame + box styling. */
+function baseDecls(node: PageNode, isRoot: boolean): string[] {
   const f = node.frame;
   const parts = isRoot
-    ? [`position: "relative"`, `width: ${f.w}`, `height: ${f.h}`, `margin: "0 auto"`]
+    ? ["position: relative", `width: ${f.w}px`, `height: ${f.h}px`, "margin: 0 auto"]
     : [
-        `position: "absolute"`,
-        `left: ${f.x}`,
-        `top: ${f.y}`,
-        `width: ${f.w}`,
-        `height: ${f.h}`,
+        "position: absolute",
+        `left: ${f.x}px`,
+        `top: ${f.y}px`,
+        `width: ${f.w}px`,
+        `height: ${f.h}px`,
       ];
-  if (node.background) parts.push(`background: "${node.background}"`);
-  if (typeof node.borderRadius === "number")
-    parts.push(`borderRadius: ${node.borderRadius}`);
+  if (node.background) parts.push(`background: ${node.background}`);
+  if (typeof node.borderRadius === "number") parts.push(`border-radius: ${node.borderRadius}px`);
   const shadow = shadowCss(node.boxShadow);
-  if (shadow) parts.push(`boxShadow: "${shadow}"`);
-  const padding = spacingValue(toSides(node.padding));
-  if (padding !== null) parts.push(`padding: ${padding}`);
+  if (shadow) parts.push(`box-shadow: ${shadow}`);
+  const padding = cssSpacing(toSides(node.padding));
+  if (padding) parts.push(`padding: ${padding}`);
   // Root keeps its "0 auto" centering margin; user margin applies elsewhere.
   if (!isRoot) {
-    const margin = spacingValue(toSides(node.margin));
-    if (margin !== null) parts.push(`margin: ${margin}`);
+    const margin = cssSpacing(toSides(node.margin));
+    if (margin) parts.push(`margin: ${margin}`);
   }
-  return `{{ ${parts.join(", ")} }}`;
+  return parts;
+}
+
+/**
+ * CSS declarations for a node's override at a breakpoint (only the changed
+ * fields). Emitted inside a max-width media query so the cascade matches
+ * resolveFrame/resolveHidden (desktop base → tablet → mobile).
+ */
+function overrideDecls(node: PageNode, bp: Exclude<BreakpointId, "desktop">): string[] {
+  const ov = node.overrides?.[bp];
+  if (!ov) return [];
+  const parts: string[] = [];
+  if (ov.frame) {
+    if (ov.frame.x !== undefined) parts.push(`left: ${ov.frame.x}px`);
+    if (ov.frame.y !== undefined) parts.push(`top: ${ov.frame.y}px`);
+    if (ov.frame.w !== undefined) parts.push(`width: ${ov.frame.w}px`);
+    if (ov.frame.h !== undefined) parts.push(`height: ${ov.frame.h}px`);
+  }
+  // Emit display for both true/false so a later breakpoint can re-show a node
+  // an earlier one hid (matches resolveHidden's "?? hidden" cascade).
+  if (ov.hidden !== undefined) parts.push(`display: ${ov.hidden ? "none" : "block"}`);
+  return parts;
+}
+
+/** A stylesheet under construction: base rules + per-breakpoint override rules. */
+interface CssAccum {
+  base: string[];
+  tablet: string[];
+  mobile: string[];
+  n: number;
+}
+
+function pushRules(acc: CssAccum, cls: string, node: PageNode, isRoot: boolean): void {
+  acc.base.push(`.${cls} { ${baseDecls(node, isRoot).join("; ")}; }`);
+  const t = overrideDecls(node, "tablet");
+  if (t.length) acc.tablet.push(`.${cls} { ${t.join("; ")}; }`);
+  const m = overrideDecls(node, "mobile");
+  if (m.length) acc.mobile.push(`.${cls} { ${m.join("; ")}; }`);
+}
+
+/** Assemble the final stylesheet text: base rules, then tablet, then mobile
+ * media blocks (mobile last so it wins at the narrowest width). */
+function buildCss(acc: CssAccum): string {
+  const blocks = [acc.base.join("\n")];
+  if (acc.tablet.length)
+    blocks.push(`@media (max-width: ${BP_WIDTH.tablet}px) {\n${indentBlock(acc.tablet.join("\n"), 2)}\n}`);
+  if (acc.mobile.length)
+    blocks.push(`@media (max-width: ${BP_WIDTH.mobile}px) {\n${indentBlock(acc.mobile.join("\n"), 2)}\n}`);
+  return blocks.join("\n\n");
 }
 
 /**
@@ -78,11 +130,16 @@ function collectComponents(body: string): string[] {
   return [...names].sort();
 }
 
-/** Render a node (and subtree) to JSX, wrapping each in a positioned div. */
+/**
+ * Render a node (and subtree) to JSX, wrapping each in a div that carries a
+ * generated class. Layout/responsive styling lives in the stylesheet (acc) so
+ * media queries can reflow it; only structure and events live in the JSX.
+ */
 function renderNode(
   doc: PageDocument,
   nodeId: string,
   isRoot: boolean,
+  acc: CssAccum,
   visited: Set<string> = new Set(),
 ): string {
   // Guard against corrupted documents with cyclic children references.
@@ -91,12 +148,15 @@ function renderNode(
   if (!node) return "";
   visited.add(nodeId);
 
+  const cls = `pg-${acc.n++}`;
+  pushRules(acc, cls, node, isRoot);
+
   const def = getComponentDef(node.type);
   // Unknown type (imported JSON / swapped registry): keep the node and its
   // subtree with a placeholder comment instead of silently dropping them.
   // Treat unknown as a possible container so children are never lost.
   const childCodes = (def?.isContainer ?? true)
-    ? node.children.map((cid) => renderNode(doc, cid, false, visited)).filter(Boolean)
+    ? node.children.map((cid) => renderNode(doc, cid, false, acc, visited)).filter(Boolean)
     : [];
   const childrenBlock = childCodes.join("\n");
   const inner = def
@@ -105,16 +165,26 @@ function renderNode(
         .filter(Boolean)
         .join("\n");
 
-  return `<div style=${frameStyle(node, isRoot)}${eventAttrs(node)}>\n${indentBlock(inner, 2)}\n</div>`;
+  return `<div className="${cls}"${eventAttrs(node)}>\n${indentBlock(inner, 2)}\n</div>`;
 }
 
 /** Generate a React + TS component string for the page. */
 export function generateCode(doc: PageDocument): string {
-  const body = renderNode(doc, doc.rootId, true).replace(/\n[ \t]*\n/g, "\n");
+  const acc: CssAccum = { base: [], tablet: [], mobile: [], n: 0 };
+  const body = renderNode(doc, doc.rootId, true, acc).replace(/\n[ \t]*\n/g, "\n");
+  // The stylesheet goes inside a <style>{`...`}</style> template literal, so any
+  // user value (e.g. node.background) carrying a backtick or ${ would break the
+  // generated JSX. Escape both at this single boundary.
+  const css = buildCss(acc).replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
   const component = [
     "export function Page() {",
     "  return (",
-    indentBlock(body, 4),
+    "    <>",
+    "      <style>{`",
+    indentBlock(css, 6),
+    "      `}</style>",
+    indentBlock(body, 6),
+    "    </>",
     "  );",
     "}",
   ].join("\n");
