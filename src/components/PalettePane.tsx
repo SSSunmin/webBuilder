@@ -73,8 +73,21 @@ function groupByCategory(defs: ComponentDef[]): [string, ComponentDef[]][] {
   return order.map((c) => [c, map.get(c)!]);
 }
 
+// Pseudo-category for blocks, kept separate from component categories so the
+// chip filter can scope to blocks alone.
+const BLOCKS_CATEGORY = "블록";
+
+const chipCls = (active: boolean) =>
+  `h-7 shrink-0 rounded-full border px-2.5 text-xs font-medium transition ${
+    active
+      ? "border-brand bg-brand text-white"
+      : "border-line bg-line2 text-ink2 hover:border-brand-lightest hover:bg-brand-pale"
+  }`;
+
 export function PalettePane() {
   const [query, setQuery] = useState("");
+  // null = 전체 (no category filter). Otherwise a component category or BLOCKS_CATEGORY.
+  const [category, setCategory] = useState<string | null>(null);
   const q = query.trim().toLowerCase();
   // Match on the display label, the registry key/type, and Korean aliases.
   const match = (label: string, key: string) =>
@@ -83,10 +96,30 @@ export function PalettePane() {
     key.toLowerCase().includes(q) ||
     (KO_ALIASES[key]?.includes(q) ?? false);
 
+  const allComponents = listComponents();
+  // Category chips derived from the registry (registry order) so newly
+  // registered components surface here without touching this file. Drop any
+  // component category that collides with the blocks pseudo-category so the
+  // "블록" chip never appears twice.
+  const categories = [
+    ...new Set(allComponents.map((d) => d.category).filter((c) => c !== BLOCKS_CATEGORY)),
+    BLOCKS_CATEGORY,
+  ];
+
+  const showComponents = category !== BLOCKS_CATEGORY;
+  const showBlocks = category === null || category === BLOCKS_CATEGORY;
+
   const groups = groupByCategory(
-    listComponents().filter((d) => match(d.label, d.type)),
+    allComponents.filter(
+      (d) =>
+        showComponents &&
+        (category === null || d.category === category) &&
+        match(d.label, d.type),
+    ),
   );
-  const blocks = listBlocks().filter((b) => match(b.label, b.key));
+  const blocks = showBlocks
+    ? listBlocks().filter((b) => match(b.label, b.key))
+    : [];
   const empty = blocks.length === 0 && groups.length === 0;
 
   return (
@@ -103,11 +136,34 @@ export function PalettePane() {
           placeholder="컴포넌트 검색"
           className="h-8 w-full rounded-button border border-line bg-line2 px-2.5 text-sm text-ink placeholder:text-muted focus:border-brand-lightest focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand"
         />
+        <div role="group" aria-label="카테고리 필터" className="mt-2 flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            aria-pressed={category === null}
+            onClick={() => setCategory(null)}
+            className={chipCls(category === null)}
+          >
+            전체
+          </button>
+          {categories.map((c) => (
+            <button
+              key={c}
+              type="button"
+              aria-pressed={category === c}
+              onClick={() => setCategory(c)}
+              className={chipCls(category === c)}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="flex-1 overflow-auto p-3">
         {empty && (
           <p className="px-1 py-6 text-center text-xs text-muted">
-            "{query.trim()}"에 맞는 컴포넌트가 없습니다.
+            {query.trim()
+              ? `"${query.trim()}"에 맞는 컴포넌트가 없습니다.`
+              : "이 카테고리에 항목이 없습니다."}
           </p>
         )}
         {blocks.length > 0 && (
@@ -122,10 +178,10 @@ export function PalettePane() {
             </div>
           </div>
         )}
-        {groups.map(([category, items]) => (
-          <div key={category} className="mb-4 last:mb-0">
+        {groups.map(([cat, items]) => (
+          <div key={cat} className="mb-4 last:mb-0">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
-              {category}
+              {cat}
             </p>
             <div className="grid gap-2">
               {items.map((d) => (
