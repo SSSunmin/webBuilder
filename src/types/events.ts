@@ -82,13 +82,23 @@ export function actionBody(ev: EventBinding): string {
     case "openUrl":
       return `window.open(${JSON.stringify(t || "#")}, "_blank");`;
     case "submit":
-      return `e.preventDefault(); /* TODO: submit${t ? ` to ${safeComment(t)}` : ""} */`;
+      // Handler sits on the wrapper div, so the <form> (if any) is a descendant.
+      // querySelector returns null when there's no form; `?? undefined` turns that
+      // into an omitted constructor arg (per WebIDL: an optional arg passed
+      // `undefined` is treated as not provided → empty FormData, no throw). Passing
+      // `null` would throw, so the `?? undefined` matters. Single statement, so it
+      // stays safe when merged with sibling bindings on the same trigger.
+      return `e.preventDefault(); fetch(${JSON.stringify(
+        t || "/api/submit",
+      )}, { method: "POST", body: new FormData(e.currentTarget.querySelector("form") ?? undefined) });`;
     case "scrollTo":
       return `document.querySelector(${JSON.stringify(
         t || "#top",
       )})?.scrollIntoView({ behavior: "smooth" });`;
     case "custom":
-      return `/* TODO: ${safeComment(t) || "action"} */`;
+      // Free-form intent can't be synthesized into working logic; emit a no-op
+      // handler carrying the description for the implementer to fill in.
+      return `/* 직접 구현: ${safeComment(t) || "사용자 정의 동작"} */`;
     default:
       // Unreachable for valid data; guards documents parsed from storage/API.
       return `/* TODO: unknown action */`;

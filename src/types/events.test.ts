@@ -31,8 +31,15 @@ describe("actionBody", () => {
     );
   });
 
-  it("prevents default for submit (so code export can pass the event arg)", () => {
-    expect(actionBody(ev({ action: "submit" }))).toContain("e.preventDefault()");
+  it("submit prevents default and fetches the endpoint with the form's data", () => {
+    const out = actionBody(ev({ action: "submit", target: "/api/contact" }));
+    expect(out).toContain("e.preventDefault()");
+    expect(out).toContain('fetch("/api/contact", { method: "POST"');
+    expect(out).toContain('new FormData(e.currentTarget.querySelector("form") ?? undefined)');
+  });
+
+  it("submit falls back to /api/submit when no endpoint is given", () => {
+    expect(actionBody(ev({ action: "submit" }))).toContain('fetch("/api/submit"');
   });
 
   it("scrolls to an anchor selector", () => {
@@ -41,23 +48,28 @@ describe("actionBody", () => {
     );
   });
 
-  it("emits a TODO comment carrying the description for custom actions", () => {
-    expect(actionBody(ev({ action: "custom", target: "open modal" }))).toBe("/* TODO: open modal */");
+  it("emits a no-op comment carrying the description for custom actions", () => {
+    expect(actionBody(ev({ action: "custom", target: "open modal" }))).toBe(
+      "/* 직접 구현: open modal */",
+    );
   });
 
-  it("neutralizes */ in comment targets so user text can't close the JS comment", () => {
+  it("neutralizes */ in custom targets so user text can't close the JS comment", () => {
     const out = actionBody(ev({ action: "custom", target: "*/ alert(1); /*" }));
     // The raw closing sequence must not survive; the comment stays well-formed.
     expect(out).not.toContain("*/ alert");
-    expect(out.startsWith("/* TODO:")).toBe(true);
+    expect(out.startsWith("/* 직접 구현:")).toBe(true);
     expect(out.endsWith("*/")).toBe(true);
-    // And the same for the submit branch's trailing comment.
-    const sub = actionBody(ev({ action: "submit", target: "*/x" }));
-    expect(sub).not.toContain("*/x");
+  });
+
+  it("escapes quotes in a submit endpoint so it can't break out of the string", () => {
+    // JSON.stringify keeps the endpoint a single well-formed string literal.
+    const out = actionBody(ev({ action: "submit", target: 'a"b' }));
+    expect(out).toContain('fetch("a\\"b"');
   });
 
   it("falls back to a safe default when the target is empty", () => {
     expect(actionBody(ev({ action: "navigate", target: "" }))).toContain('"/"');
-    expect(actionBody(ev({ action: "custom" }))).toBe("/* TODO: action */");
+    expect(actionBody(ev({ action: "custom" }))).toBe("/* 직접 구현: 사용자 정의 동작 */");
   });
 });

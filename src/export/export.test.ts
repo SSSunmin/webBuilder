@@ -293,6 +293,27 @@ describe("event bindings", () => {
     expect(code).toContain("onSubmit={(e) => { e.preventDefault();");
   });
 
+  it("submit generates a fetch POST to the endpoint with the form's data", () => {
+    buildWithEvent("submit", "/api/contact");
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain('fetch("/api/contact", { method: "POST"');
+    expect(code).toContain('new FormData(e.currentTarget.querySelector("form") ?? undefined)');
+    expect(code).not.toContain("TODO");
+  });
+
+  it("submit without an endpoint falls back to /api/submit", () => {
+    buildWithEvent("submit");
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain('fetch("/api/submit", { method: "POST"');
+  });
+
+  it("custom emits a no-op handler carrying the description (not a TODO)", () => {
+    buildWithEvent("custom", "장바구니에 담기");
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain("/* 직접 구현: 장바구니에 담기 */");
+    expect(code).not.toContain("TODO");
+  });
+
   it("merges multiple bindings on the same trigger into one handler", () => {
     const store = useEditorStore.getState();
     const doc = store.newDocument("Multi");
