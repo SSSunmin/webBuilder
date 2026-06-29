@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { getComponentDef } from "../registry";
 import { useEditorStore } from "../store/editorStore";
-import { BREAKPOINTS, resolveFrame, resolveHidden, shadowCss } from "../types/page";
+import { BREAKPOINTS, resolveColor, resolveFrame, resolveHidden, shadowCss } from "../types/page";
 import type { BreakpointId, PageDocument } from "../types/page";
 
 /**
@@ -31,6 +31,7 @@ function renderNode(
   const rootWidth =
     bp === "desktop" ? frame.w : BREAKPOINTS.find((b) => b.id === bp)!.width;
   const boxShadow = shadowCss(node.boxShadow);
+  const background = resolveColor(node.background, doc.meta.tokens);
 
   const style: CSSProperties = isRoot
     ? {
@@ -38,7 +39,7 @@ function renderNode(
         width: rootWidth,
         height: frame.h,
         margin: "0 auto",
-        background: node.background,
+        background,
         borderRadius: node.borderRadius,
         boxShadow,
       }
@@ -48,7 +49,7 @@ function renderNode(
         top: frame.y,
         width: frame.w,
         height: frame.h,
-        background: node.background,
+        background,
         borderRadius: node.borderRadius,
         boxShadow,
       };

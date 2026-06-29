@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { createNode, defaultFrameFor, getBlockDef, getComponentDef } from "../registry";
-import { DEFAULT_SHADOW, resolveFrame, toSides } from "../types/page";
+import { DEFAULT_SHADOW, isValidTokenKey, resolveFrame, toSides } from "../types/page";
 import type {
   BreakpointId,
   NodeFrame,
@@ -103,6 +103,11 @@ interface EditorState {
   moveNodeBy: (id: string, dx: number, dy: number, tag?: string) => void;
   setNodeBackground: (id: string, background: string) => void;
   setNodeRadius: (id: string, borderRadius: number) => void;
+  /** Upsert a document-level color token. Invalid keys are ignored. */
+  setColorToken: (key: string, value: string) => void;
+  /** Remove a color token. Nodes still referencing it render without that color
+   * (the ref dangles → resolves to undefined) until repointed. */
+  removeColorToken: (key: string) => void;
   /** Merge a partial pixel shadow into the node (creates a default if none). */
   updateNodeShadow: (id: string, partial: Partial<ShadowSpec>) => void;
   /** Remove a node's shadow entirely. */
@@ -451,6 +456,29 @@ export const useEditorStore = create<EditorState>((set, get) => {
 
     setNodeBackground: (id, background) =>
       patchNode(id, (node) => ({ ...node, background }), `bg:${id}`),
+
+    setColorToken: (key, value) => {
+      if (!isValidTokenKey(key)) return;
+      apply(
+        (d) => ({
+          ...d,
+          meta: {
+            ...d.meta,
+            tokens: { ...d.meta.tokens, colors: { ...d.meta.tokens?.colors, [key]: value } },
+          },
+        }),
+        // Coalesce edits to the same token (e.g. dragging a color picker).
+        `token:color:${key}`,
+      );
+    },
+
+    removeColorToken: (key) =>
+      apply((d) => {
+        const colors = { ...d.meta.tokens?.colors };
+        if (!(key in colors)) return d;
+        delete colors[key];
+        return { ...d, meta: { ...d.meta, tokens: { ...d.meta.tokens, colors } } };
+      }, null),
 
     setNodeRadius: (id, borderRadius) =>
       patchNode(

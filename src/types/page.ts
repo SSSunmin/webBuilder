@@ -116,6 +116,12 @@ export interface PageNode {
   events?: EventBinding[];
 }
 
+/** Document-level design tokens. v1 carries named colors only; a node points at
+ * a color by storing `token:<key>` in a color field (see {@link makeColorTokenRef}). */
+export interface DocumentTokens {
+  colors?: Record<string, string>;
+}
+
 export interface PageDocument {
   id: string;
   version: 1;
@@ -126,6 +132,8 @@ export interface PageDocument {
     createdAt: string;
     updatedAt: string;
     thumbnail?: string;
+    /** Document-level design tokens (v1: named colors referenced by nodes). */
+    tokens?: DocumentTokens;
   };
 }
 
@@ -157,4 +165,69 @@ export function resolveHidden(node: PageNode, bp: BreakpointId): boolean {
   if (bp === "tablet" || bp === "mobile") hidden = node.overrides?.tablet?.hidden ?? hidden;
   if (bp === "mobile") hidden = node.overrides?.mobile?.hidden ?? hidden;
   return hidden;
+}
+
+// --- Design tokens (v1: named colors) -------------------------------------
+// A node references a token by storing `token:<key>` in a color field instead
+// of a literal color. Rendering resolves the ref to its hex value; code export
+// emits a CSS custom property (`var(--color-<key>)`) backed by a `:root` block.
+
+const COLOR_TOKEN_PREFIX = "token:";
+
+/** Token keys map to CSS custom property names, so keep them identifier-like:
+ * start with a letter, then letters/digits/hyphens. */
+export function isValidTokenKey(key: string): boolean {
+  return /^[a-zA-Z][a-zA-Z0-9-]*$/.test(key);
+}
+
+/** Build the sentinel a node stores to point at a color token. */
+export function makeColorTokenRef(key: string): string {
+  return COLOR_TOKEN_PREFIX + key;
+}
+
+/** True when a color field holds a token reference rather than a literal color. */
+export function isColorTokenRef(value: string | undefined): value is string {
+  return typeof value === "string" && value.startsWith(COLOR_TOKEN_PREFIX);
+}
+
+/** Extract the token key from a `token:<key>` reference. */
+export function colorTokenKey(ref: string): string {
+  return ref.slice(COLOR_TOKEN_PREFIX.length);
+}
+
+/** CSS custom property name for a color token key. */
+export function colorTokenVar(key: string): string {
+  return `--color-${key}`;
+}
+
+/**
+ * Resolve a color field to a literal CSS color for rendering. A token ref is
+ * looked up in the document's tokens; a dangling ref (token deleted/renamed)
+ * resolves to undefined so the node simply renders without a background rather
+ * than showing the raw `token:` string.
+ */
+export function resolveColor(
+  value: string | undefined,
+  tokens: DocumentTokens | undefined,
+): string | undefined {
+  if (!isColorTokenRef(value)) return value;
+  return tokens?.colors?.[colorTokenKey(value)];
+}
+
+/**
+ * Trust boundary for color values. A token value or literal background is
+ * user-supplied and gets interpolated into generated CSS / SVG, so allow only
+ * simple color forms — otherwise a value like `red; } body { ... ` could break
+ * out of a `:root`/`<style>` block (CSS injection, A03). Returns the trimmed
+ * color when safe, or null so callers drop it rather than emit it raw.
+ */
+export function sanitizeColor(color: string | undefined): string | null {
+  if (!color) return null;
+  const c = color.trim();
+  if (!c) return null;
+  // hex, rgb()/rgba(), hsl()/hsla(), or a bare color keyword
+  if (/^#[0-9a-fA-F]{3,8}$/.test(c)) return c;
+  if (/^(rgb|rgba|hsl|hsla)\([0-9.,%\s/]+\)$/.test(c)) return c;
+  if (/^[a-zA-Z]+$/.test(c)) return c;
+  return null;
 }

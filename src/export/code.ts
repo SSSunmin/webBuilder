@@ -1,6 +1,14 @@
 import { getComponentDef } from "../registry";
-import type { BreakpointId, PageDocument, PageNode, Sides } from "../types/page";
-import { BREAKPOINTS, shadowCss, toSides } from "../types/page";
+import type { BreakpointId, DocumentTokens, PageDocument, PageNode, Sides } from "../types/page";
+import {
+  BREAKPOINTS,
+  colorTokenKey,
+  colorTokenVar,
+  isColorTokenRef,
+  sanitizeColor,
+  shadowCss,
+  toSides,
+} from "../types/page";
 import { TRIGGER_PROP, actionBody, actionNeedsEvent, safeComment } from "../types/events";
 
 function indentBlock(code: string, spaces: number): string {
@@ -26,7 +34,7 @@ function cssSpacing(sides: Sides): string | null {
 }
 
 /** Base (desktop) CSS declarations for a node's frame + box styling. */
-function baseDecls(node: PageNode, isRoot: boolean): string[] {
+function baseDecls(node: PageNode, isRoot: boolean, tokens: DocumentTokens | undefined): string[] {
   const f = node.frame;
   const parts = isRoot
     ? ["position: relative", `width: ${f.w}px`, `height: ${f.h}px`, "margin: 0 auto"]
@@ -37,7 +45,20 @@ function baseDecls(node: PageNode, isRoot: boolean): string[] {
         `width: ${f.w}px`,
         `height: ${f.h}px`,
       ];
-  if (node.background) parts.push(`background: ${node.background}`);
+  if (node.background) {
+    // A token reference becomes a CSS custom property backed by the :root block —
+    // but only when the token still exists AND its value is a safe color; a
+    // dangling or unsafe ref drops the background, matching resolveColor + the
+    // :root block (rootTokenBlock filters the same way). A literal color is
+    // sanitized so a value like `red; } ...` can't break out of the stylesheet.
+    if (isColorTokenRef(node.background)) {
+      const key = colorTokenKey(node.background);
+      if (sanitizeColor(tokens?.colors?.[key])) parts.push(`background: var(${colorTokenVar(key)})`);
+    } else {
+      const bg = sanitizeColor(node.background);
+      if (bg) parts.push(`background: ${bg}`);
+    }
+  }
   if (typeof node.borderRadius === "number") parts.push(`border-radius: ${node.borderRadius}px`);
   const shadow = shadowCss(node.boxShadow);
   if (shadow) parts.push(`box-shadow: ${shadow}`);
@@ -80,18 +101,40 @@ interface CssAccum {
   n: number;
 }
 
-function pushRules(acc: CssAccum, cls: string, node: PageNode, isRoot: boolean): void {
-  acc.base.push(`.${cls} { ${baseDecls(node, isRoot).join("; ")}; }`);
+function pushRules(
+  acc: CssAccum,
+  cls: string,
+  node: PageNode,
+  isRoot: boolean,
+  tokens: DocumentTokens | undefined,
+): void {
+  acc.base.push(`.${cls} { ${baseDecls(node, isRoot, tokens).join("; ")}; }`);
   const t = overrideDecls(node, "tablet");
   if (t.length) acc.tablet.push(`.${cls} { ${t.join("; ")}; }`);
   const m = overrideDecls(node, "mobile");
   if (m.length) acc.mobile.push(`.${cls} { ${m.join("; ")}; }`);
 }
 
-/** Assemble the final stylesheet text: base rules, then tablet, then mobile
- * media blocks (mobile last so it wins at the narrowest width). */
-function buildCss(acc: CssAccum): string {
-  const blocks = [acc.base.join("\n")];
+/** A `:root` block declaring every defined color token as a custom property,
+ * or null when there are none. Nodes reference these via `var(--color-<key>)`.
+ * Unsafe values are dropped (same trust boundary as baseDecls) so a token like
+ * `red; } body { ... ` can't break out of the block. */
+function rootTokenBlock(tokens: DocumentTokens | undefined): string | null {
+  const colors = tokens?.colors;
+  if (!colors) return null;
+  const decls = Object.entries(colors)
+    .map(([k, v]) => [k, sanitizeColor(v)] as const)
+    .filter(([, v]) => v !== null)
+    .map(([k, v]) => `${colorTokenVar(k)}: ${v};`);
+  if (!decls.length) return null;
+  return `:root {\n${indentBlock(decls.join("\n"), 2)}\n}`;
+}
+
+/** Assemble the final stylesheet text: :root tokens, base rules, then tablet,
+ * then mobile media blocks (mobile last so it wins at the narrowest width). */
+function buildCss(acc: CssAccum, tokens: DocumentTokens | undefined): string {
+  const root = rootTokenBlock(tokens);
+  const blocks = root ? [root, acc.base.join("\n")] : [acc.base.join("\n")];
   if (acc.tablet.length)
     blocks.push(`@media (max-width: ${BP_WIDTH.tablet}px) {\n${indentBlock(acc.tablet.join("\n"), 2)}\n}`);
   if (acc.mobile.length)
@@ -149,7 +192,7 @@ function renderNode(
   visited.add(nodeId);
 
   const cls = `pg-${acc.n++}`;
-  pushRules(acc, cls, node, isRoot);
+  pushRules(acc, cls, node, isRoot, doc.meta.tokens);
 
   const def = getComponentDef(node.type);
   // Unknown type (imported JSON / swapped registry): keep the node and its
@@ -175,7 +218,7 @@ export function generateCode(doc: PageDocument): string {
   // The stylesheet goes inside a <style>{`...`}</style> template literal, so any
   // user value (e.g. node.background) carrying a backtick or ${ would break the
   // generated JSX. Escape both at this single boundary.
-  const css = buildCss(acc).replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+  const css = buildCss(acc, doc.meta.tokens).replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
   const component = [
     "export function Page() {",
     "  return (",
