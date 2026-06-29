@@ -33,6 +33,7 @@
 | (예) 피그마 → 코드 (피그마 쓸 때만) | `docs/skills/ui/figma/*.md` |
 | (예) 상태·데이터·HTTP | `docs/skills/state/*.md` |
 | (예) 구조·환경·컨벤션 | `docs/skills/foundation/*.md` |
+| 보안 점검 (웹·프론트 / 백엔드·API / AI·MCP) | `docs/skills/security/*.md` |
 | skill/메모 작성 기준 | `docs/skills/guide/skill-guide.md` |
 
 > 새 주제가 반복되면 `docs/skills/`에 문서를 추가하고 이 표에 한 줄 등록한다. 작성법: `docs/skills/guide/skill-guide.md`.
@@ -42,6 +43,7 @@
 ## ✅ 품질 게이트 (정확도·코드품질)
 
 1. **구현** → 2. **리뷰**(별도 패스 `/review` 또는 `code-reviewer` — critical/major/minor) → 3. **단순화**(선택 `/simplify` 또는 `code-simplifier` — 기능 보존, 중복·네이밍·일관성) → 4. **검증**(`/verify` 또는 통과까지 `/ultraqa`).
+- **보안 리뷰 필수**: 2번 리뷰 단계에서 변경 성격에 맞는 보안 체크리스트(`docs/skills/security/*.md` — 웹·프론트 / 백엔드·API / AI·MCP 중 해당분)를 **반드시 대조**한다. "빠른 레드플래그"에 걸리면 critical(보안)으로 매핑 번호(A03·API1·LLM01 등)와 함께 지적하고, **해소 전에는 완료 선언 금지**.
 - **완료 선언 전 증거 필수**: 테스트/린트/타입체크/실행 결과를 실제로 보여준다. 추측 완료 금지.
 - 깨지기 쉬운 게이트(빌드·타입·테스트)는 `/ultraqa --build|--typecheck|--tests`로 통과까지 자동 반복.
 
