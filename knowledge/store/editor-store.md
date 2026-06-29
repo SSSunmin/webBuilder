@@ -1,10 +1,10 @@
 ---
 type: Reference
 title: 에디터 스토어 (Zustand)
-description: useEditorStore 상태 구조, 전체 액션 목록, undo/redo coalescing 메커니즘, breakpoint 편집 모드.
+description: useEditorStore 상태 구조, 전체 액션 목록, undo/redo coalescing 메커니즘, breakpoint 편집 모드. v2에서 글꼴·간격 토큰 액션 추가.
 resource: src/store/editorStore.ts
-tags: [store, zustand, undo-redo, state, breakpoint]
-timestamp: 2026-06-22
+tags: [store, zustand, undo-redo, state, breakpoint, design-tokens]
+timestamp: 2026-06-29
 ---
 
 # 에디터 스토어 (Zustand)
@@ -45,9 +45,13 @@ tag === null     →  항상 새 스냅샷 (이산적 액션)
 - spacing: `spacing:<id>:p<keys>|m<keys>`
 - background: `bg:<id>`
 - radius: `radius:<id>`
+- shadow: `shadow:<id>:<fields>` (필드별 태그로 x·y·blur가 별도 undo step)
 - event 편집: `event:<id>:<eventId>:<fields>`
 - hidden 토글: `hidden:<id>:<bp>`
 - reset override: `reset:<id>:<bp>`
+- 색상 토큰 편집: `token:color:<key>` (색상 피커 드래그 중 coalesce)
+- 글꼴 토큰 편집: `token:font:<key>`
+- 간격 토큰 편집: `token:spacing:<key>`
 
 `selectNode()` 호출 시 `lastTag: null`로 초기화 → 선택이 바뀌면 coalescing 세션 종료.
 
@@ -81,11 +85,25 @@ tag === null     →  항상 새 스냅샷 (이산적 액션)
 | `updateNodeProps(id, partial)` | `props:<id>:<keys>` | props 부분 업데이트 |
 | `updateNodeFrame(id, partial, tag?)` | `frame:<id>:<fields>` | 활성 브레이크포인트에 frame 기록 |
 | `moveNodeBy(id, dx, dy, tag?)` | null (기본) | 활성 bp 기준 resolve 후 이동 |
-| `setNodeBackground(id, bg)` | `bg:<id>` | background 색상 |
+| `setNodeBackground(id, bg)` | `bg:<id>` | background 색상 (리터럴 또는 `token:<key>` 참조 모두 가능) |
 | `setNodeRadius(id, r)` | `radius:<id>` | borderRadius (0 이상 정수로 클램프) |
-| `updateNodeShadow(id, partial)` | `shadow:<id>` | 픽셀 그림자(ShadowSpec) 부분 병합 (없으면 DEFAULT_SHADOW 생성) |
+| `updateNodeShadow(id, partial)` | `shadow:<id>:<fields>` | 픽셀 그림자(ShadowSpec) 부분 병합 (없으면 DEFAULT_SHADOW 생성) |
 | `clearNodeShadow(id)` | null | 그림자 제거 (boxShadow → undefined) |
-| `updateNodeSpacing(id, {padding?, margin?})` | `spacing:...` | padding/margin 부분 업데이트 |
+| `updateNodeSpacing(id, {padding?, margin?})` | `spacing:...` | padding/margin 부분 업데이트. 토큰 참조 중인 노드는 resolve 후 Sides로 전환 |
+| `setNodeSpacingValue(id, which, value)` | null | padding/margin을 Sides 또는 `token:<key>` 참조로 통째로 교체 (인스펙터에서 리터럴↔토큰 전환 시 사용) |
+
+### 디자인 토큰 액션
+
+문서 전역 토큰(`meta.tokens`)을 upsert/remove한다. 유효하지 않은 키(`isValidTokenKey` 실패)는 무시된다.
+
+| 액션 | tag | 설명 |
+|---|---|---|
+| `setColorToken(key, value)` | `token:color:<key>` | 색상 토큰 upsert |
+| `removeColorToken(key)` | null | 색상 토큰 삭제. 참조 중인 노드는 dangling → 배경 없음 |
+| `setFontToken(key, value)` | `token:font:<key>` | 글꼴 토큰 upsert. `body` 키가 페이지 루트 `font-family`로 전역 적용 |
+| `removeFontToken(key)` | null | 글꼴 토큰 삭제 |
+| `setSpacingToken(key, value)` | `token:spacing:<key>` | 간격 토큰 upsert (px) |
+| `removeSpacingToken(key)` | null | 간격 토큰 삭제. 참조 중인 노드는 dangling → 간격 0으로 fallback |
 
 ### 이벤트 바인딩
 

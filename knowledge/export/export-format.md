@@ -1,10 +1,10 @@
 ---
 type: Reference
 title: MD Export 형식
-description: generateMarkdown의 세 가지 모드(spec/code/both), 모든 모드 앞에 붙는 포터블 컨텍스트(서문+컴포넌트 범례), 명세서 트리 직렬화 방식, React 코드 생성 방식, 이벤트·override 출력 규칙.
+description: generateMarkdown의 세 가지 모드(spec/code/both), 모든 모드 앞에 붙는 포터블 컨텍스트(서문+컴포넌트 범례), 명세서 트리 직렬화 방식, React 코드 생성 방식, 이벤트·override 출력 규칙. v2에서 디자인 토큰 → CSS 변수 출력 추가.
 resource: src/export/index.ts, src/export/spec.ts, src/export/code.ts, src/export/legend.ts
-tags: [export, markdown, spec, code, events, portable, legend]
-timestamp: 2026-06-23
+tags: [export, markdown, spec, code, events, portable, legend, design-tokens]
+timestamp: 2026-06-29
 ---
 
 # MD Export 형식
@@ -50,24 +50,34 @@ function generateMarkdown(doc: PageDocument, mode: ExportMode): string
 ```
 # Page: <doc.meta.name>
 
+## 디자인 토큰 (색상)
+- `<key>`: `<value>`
+...
+
+## 디자인 토큰 (글꼴)
+## 디자인 토큰 (간격)
+
 - **<label>** (container) — <frameSummary> — <propsSummary>
   - <breakpoint override lines>
   - <event lines>
   - **<child label>** — ...
 ```
 
+`tokensSection(tokens)` 함수가 `colors` / `fonts` / `spacing` 세 섹션을 각각 생성한다. 정의된 카테고리가 하나라도 있으면 헤더 `## 페이지` 트리 앞에 삽입된다. 키·값은 모두 코드 스팬으로 감싸 마크다운 이스케이프 처리한다.
+
 ### frameSummary 구성 요소
 
 | 요소 | 조건 | 예시 |
 |---|---|---|
 | 위치+크기 | 항상 | `@(24,16) 320×48` (루트는 크기만) |
-| bg | background 있을 때 | `bg #ffffff` |
+| bg | background 있을 때 | `bg #ffffff` / `bg token primary (#3b82f6)` |
 | radius | borderRadius > 0 | `radius 14` |
 | shadow | boxShadow 있을 때 | `shadow 0/4/12/0 #000000 15%` (x/y/blur/spread 색 투명도) |
-| pad | padding이 0이 아닐 때 | `pad 16` 또는 `pad 8/16/8/16` |
-| margin | margin이 0이 아닐 때 | `margin 8` |
+| pad | padding이 0이 아닐 때 | `pad 16` / `pad token sm (8px)` / `pad 8/16/8/16` |
+| margin | margin이 0이 아닐 때 | `margin 8` / `margin token gap (미정의)` |
 
-spacing 표기법: 균일하면 단일 숫자, 비균일하면 `T/R/B/L`.
+spacing 표기법: 균일하면 단일 숫자, 비균일하면 `T/R/B/L`. 토큰 참조이면 `token <key> (<px>px)` 또는 `token <key> (미정의)`.
+배경 토큰 참조이면 `bg token <key> (<resolved>)` 또는 `bg token <key> (미정의)`.
 props 요약(`summarizeProps`)은 스키마 순서대로 출력하되, `icon`이 없으면 `iconSize`(default 16)는 생략한다.
 
 ### 브레이크포인트 오버라이드 출력
@@ -97,26 +107,60 @@ import { Button, Layout, ... } from "./components";
 
 export function Page() {
   return (
-    <div style={{ position: "relative", width: 960, height: 600, ... }}>
-      <ComponentDef.toCode() 출력>
-        <div style={{ position: "absolute", left: x, top: y, width: w, height: h, ... }}
-             onClick={(e) => { ... }}>
-          ...
-        </div>
-      </ComponentDef.toCode() 출력>
-    </div>
+    <>
+      <style>{`
+        :root {
+          --color-primary: #3b82f6;
+          --space-sm: 8px;
+          --font-body: Inter, sans-serif;
+        }
+
+        .pg-0 { position: relative; width: 1280px; height: 900px; margin: 0 auto;
+                font-family: var(--font-body); }
+        .pg-1 { position: absolute; left: 24px; top: 16px; width: 320px; height: 48px;
+                background: var(--color-primary); padding: var(--space-sm); }
+        ...
+
+        @media (max-width: 768px) { ... }
+        @media (max-width: 375px) { ... }
+      `}</style>
+      <div className="pg-0">
+        ...
+      </div>
+    </>
   );
 }
 ```
 
-### frameStyle 구성 요소
+스타일은 인라인 style이 아닌 **클래스명(`pg-N`) + `<style>` 블록** 방식으로 출력된다. 미디어 쿼리(`@media max-width`)로 반응형 override를 지원한다.
 
-- 루트: `position:"relative"`, `margin:"0 auto"`, width/height
-- 자식: `position:"absolute"`, left/top/width/height
-- 공통(있을 때): `background`, `borderRadius`, `boxShadow`(`shadowCss`로 ShadowSpec → rgba box-shadow), `padding`, `margin`(루트 제외)
-- Button은 `toCode`에서 `icon`/`iconSize`(아이콘 있을 때만)·`hoverBg`/`hoverText`를 prop으로 전달 — 소비 측 Button이 구현
+### `:root` 토큰 블록 (`rootTokenBlock`)
 
-spacing: 균일이면 숫자, 비균일이면 `"Tpx Rpx Bpx Lpx"` 문자열.
+`meta.tokens`가 있으면 CSS 파일 맨 앞에 `:root { ... }` 블록을 삽입한다:
+
+| 토큰 카테고리 | 변수명 형식 | 예시 |
+|---|---|---|
+| `colors` | `--color-<key>` | `--color-primary: #3b82f6;` |
+| `spacing` | `--space-<key>` | `--space-sm: 8px;` |
+| `fonts` | `--font-<key>` | `--font-body: Inter, sans-serif;` |
+
+unsafe 값은 `sanitizeColor` / `sanitizeSpacing` / `sanitizeFontFamily`로 검증 후 드롭 — `:root` 블록과 `var()` 참조 양쪽에서 동일하게 적용된다.
+
+### baseDecls 구성 요소 (노드별 CSS 선언)
+
+- 루트: `position: relative`, `margin: 0 auto`, width/height
+- 자식: `position: absolute`, left/top/width/height
+- 공통(있을 때): `background`, `borderRadius`, `box-shadow`(`shadowCss`로 ShadowSpec → rgba), `padding`, `margin`(루트 제외)
+- **배경 토큰 참조**: `background: var(--color-<key>)` (dangling이면 background 선언 드롭)
+- **간격 토큰 참조**: `padding: var(--space-<key>)` / `margin: var(--space-<key>)` (dangling이면 드롭)
+- **글꼴**: 루트 노드에만 `font-family: var(--font-body)` (body 토큰이 있고 safe할 때)
+- Button은 `toCode`에서 `icon`/`iconSize`(아이콘 있을 때만)·`hoverBg`/`hoverText`를 prop으로 전달
+
+spacing(리터럴 Sides): 균일이면 `Npx`, 비균일이면 `Tpx Rpx Bpx Lpx` 단축 형식. 전부 0이면 생략.
+
+### 템플릿 리터럴 이스케이프
+
+stylesheet는 `` <style>{`...`}</style> `` 안에 들어가므로 사용자 값의 `` ` `` 와 `${` 를 단일 경계에서 이스케이프한다 (`buildCss` 이후, `component` 조립 전).
 
 ### 이벤트 핸들러 출력
 

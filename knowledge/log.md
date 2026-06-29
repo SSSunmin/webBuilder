@@ -2,6 +2,13 @@
 
 OKF 번들의 변경 이력. 최신 항목이 위. `/okf` 실행 시 knowledge-curator가 여기에 기록한다.
 
+## 2026-06-29 (디자인 토큰 v2 — 문서 전역 글꼴·간격 토큰)
+
+- `data-model/page-node.md`: `PageDocument.meta.tokens?: DocumentTokens` 반영, `PageNode.background?`(색상 토큰 참조 허용)·`padding/margin?: Sides | string`(간격 토큰 참조) 타입 갱신, `toSides(v, tokens?)` 시그니처 갱신. 신규 "DocumentTokens — 문서 전역 디자인 토큰" 섹션(토큰 참조 모델 표·키 규칙·신뢰경계 sanitize 표). frontmatter tags/timestamp 갱신.
+- `store/editor-store.md`: 디자인 토큰 액션 표(`setColorToken`/`setFontToken`/`setSpacingToken` + remove·`setNodeSpacingValue`), undo 태그(`token:color|font|spacing:<key>`), `updateNodeSpacing`의 토큰→Sides 전환 설명 추가.
+- `export/export-format.md`: `tokensSection`(색상·글꼴·간격 스펙 섹션), `rootTokenBlock`(`:root`에 `--color-*`/`--space-*`/`--font-*`), `baseDecls`의 토큰 var() 참조·루트 `font-family: var(--font-body)`, 클래스명+`<style>` 출력 방식과 템플릿 리터럴 이스케이프 갱신.
+- 신뢰경계(A03): `sanitizeColor`/`sanitizeFontFamily`/`sanitizeSpacing` 화이트리스트가 export 레이어에서 CSS 인젝션을 차단하며 dangling/unsafe는 `:root` 선언·`var()` 참조 양쪽에서 드롭됨을 세 문서 모두에 반영. 토큰은 외부 `tokens.css`가 아닌 문서 내부(`meta.tokens`) 모델이라 별도 `design/tokens` 개념 파일 없이 데이터 모델 문서에 둠.
+
 ## 2026-06-23 (백엔드 승격 — Supabase 영속·인증·멀티유저)
 
 - `storage/storage-layer.md`: env 기반 어댑터 선택(`backendConfig.backendEnabled`), `SupabaseStorageAdapter`(projects 테이블·RLS·onConflict upsert), `InMemoryStorageAdapter` + `adapterContract` 공유 계약 테스트, "로컬→백엔드 가져오기", 자체 서버 승격 경로 추가. frontmatter resource/tags 갱신.
