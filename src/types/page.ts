@@ -17,9 +17,20 @@ export interface Sides {
 
 export const ZERO_SIDES: Sides = { top: 0, right: 0, bottom: 0, left: 0 };
 
-/** Normalize a side value that may be a uniform number, a Sides, or missing. */
-export function toSides(v: Sides | number | undefined | null): Sides {
+/**
+ * Normalize a side value to a numeric Sides. Accepts a uniform number, a Sides,
+ * a `token:<key>` spacing reference (resolved against `tokens` and applied
+ * uniformly; a dangling ref → zero), or missing.
+ */
+export function toSides(
+  v: Sides | number | string | undefined | null,
+  tokens?: DocumentTokens,
+): Sides {
   if (v == null) return ZERO_SIDES;
+  if (typeof v === "string") {
+    const n = resolveSpacing(v, tokens);
+    return n == null ? ZERO_SIDES : { top: n, right: n, bottom: n, left: n };
+  }
   if (typeof v === "number") return { top: v, right: v, bottom: v, left: v };
   return {
     top: v.top ?? 0,
@@ -106,20 +117,28 @@ export interface PageNode {
   borderRadius?: number;
   /** Pixel-level drop shadow; undefined = none. */
   boxShadow?: ShadowSpec;
-  /** Inner padding (per side) — children snap to the padded inner area. */
-  padding?: Sides;
-  /** Outer margin (per side) — siblings keep this gap when snapping. */
-  margin?: Sides;
+  /** Inner padding — explicit per-side values, or a `token:<key>` spacing-token
+   * reference applied uniformly to all sides. Children snap to the padded area. */
+  padding?: Sides | string;
+  /** Outer margin — explicit per-side values, or a `token:<key>` spacing-token
+   * reference applied uniformly. Siblings keep this gap when snapping. */
+  margin?: Sides | string;
   /** Per-breakpoint overrides; desktop is the base frame (no override). */
   overrides?: Partial<Record<Exclude<BreakpointId, "desktop">, NodeOverride>>;
   /** Interaction bindings (trigger → action), emitted to the spec and code. */
   events?: EventBinding[];
 }
 
-/** Document-level design tokens. v1 carries named colors only; a node points at
- * a color by storing `token:<key>` in a color field (see {@link makeColorTokenRef}). */
+/** Document-level design tokens. A node points at a color/spacing token by
+ * storing `token:<key>` in the matching field (background, padding, margin);
+ * fonts are applied document-wide rather than referenced per node.
+ * - colors: named CSS colors (v1)
+ * - fonts: named font-family stacks; `body` is applied to the page root (v2)
+ * - spacing: named px values referenced uniformly by padding/margin (v2) */
 export interface DocumentTokens {
   colors?: Record<string, string>;
+  fonts?: Record<string, string>;
+  spacing?: Record<string, number>;
 }
 
 export interface PageDocument {
@@ -167,12 +186,14 @@ export function resolveHidden(node: PageNode, bp: BreakpointId): boolean {
   return hidden;
 }
 
-// --- Design tokens (v1: named colors) -------------------------------------
-// A node references a token by storing `token:<key>` in a color field instead
-// of a literal color. Rendering resolves the ref to its hex value; code export
-// emits a CSS custom property (`var(--color-<key>)`) backed by a `:root` block.
+// --- Design tokens --------------------------------------------------------
+// A node references a token by storing `token:<key>` in a field instead of a
+// literal value: background → color tokens, padding/margin → spacing tokens.
+// Rendering resolves the ref; code export emits a CSS custom property
+// (`var(--color-<key>)` / `var(--space-<key>)`) backed by a `:root` block.
+// Fonts are not referenced per node — they apply document-wide (see baseDecls).
 
-const COLOR_TOKEN_PREFIX = "token:";
+const TOKEN_PREFIX = "token:";
 
 /** Token keys map to CSS custom property names, so keep them identifier-like:
  * start with a letter, then letters/digits/hyphens. */
@@ -180,19 +201,30 @@ export function isValidTokenKey(key: string): boolean {
   return /^[a-zA-Z][a-zA-Z0-9-]*$/.test(key);
 }
 
+/** True when a field holds a `token:<key>` reference rather than a literal. */
+function isTokenRef(value: string | Sides | undefined): value is string {
+  return typeof value === "string" && value.startsWith(TOKEN_PREFIX);
+}
+
+/** Extract the token key from a `token:<key>` reference. */
+function tokenKey(ref: string): string {
+  return ref.slice(TOKEN_PREFIX.length);
+}
+
+// --- Color tokens ---
 /** Build the sentinel a node stores to point at a color token. */
 export function makeColorTokenRef(key: string): string {
-  return COLOR_TOKEN_PREFIX + key;
+  return TOKEN_PREFIX + key;
 }
 
 /** True when a color field holds a token reference rather than a literal color. */
 export function isColorTokenRef(value: string | undefined): value is string {
-  return typeof value === "string" && value.startsWith(COLOR_TOKEN_PREFIX);
+  return isTokenRef(value);
 }
 
-/** Extract the token key from a `token:<key>` reference. */
+/** Extract the token key from a `token:<key>` color reference. */
 export function colorTokenKey(ref: string): string {
-  return ref.slice(COLOR_TOKEN_PREFIX.length);
+  return tokenKey(ref);
 }
 
 /** CSS custom property name for a color token key. */
@@ -214,12 +246,58 @@ export function resolveColor(
   return tokens?.colors?.[colorTokenKey(value)];
 }
 
+// --- Spacing tokens ---
+/** Build the sentinel a node stores in padding/margin to point at a spacing token. */
+export function makeSpacingTokenRef(key: string): string {
+  return TOKEN_PREFIX + key;
+}
+
+/** True when a padding/margin field holds a spacing token reference. */
+export function isSpacingTokenRef(value: string | Sides | undefined): value is string {
+  return isTokenRef(value);
+}
+
+/** Extract the token key from a `token:<key>` spacing reference. */
+export function spacingTokenKey(ref: string): string {
+  return tokenKey(ref);
+}
+
+/** CSS custom property name for a spacing token key. */
+export function spacingTokenVar(key: string): string {
+  return `--space-${key}`;
+}
+
 /**
- * Trust boundary for color values. A token value or literal background is
- * user-supplied and gets interpolated into generated CSS / SVG, so allow only
- * simple color forms — otherwise a value like `red; } body { ... ` could break
- * out of a `:root`/`<style>` block (CSS injection, A03). Returns the trimmed
- * color when safe, or null so callers drop it rather than emit it raw.
+ * Resolve a padding/margin value to its px number when it is a spacing-token
+ * reference, or undefined otherwise (a literal Sides is handled by the caller)
+ * — including a dangling ref (token deleted), so the spacing simply drops.
+ */
+export function resolveSpacing(
+  value: string | Sides | undefined,
+  tokens: DocumentTokens | undefined,
+): number | undefined {
+  if (!isSpacingTokenRef(value)) return undefined;
+  return sanitizeSpacing(tokens?.spacing?.[spacingTokenKey(value)]) ?? undefined;
+}
+
+// --- Font tokens ---
+/** CSS custom property name for a font token key. */
+export function fontTokenVar(key: string): string {
+  return `--font-${key}`;
+}
+
+/** The document's base font-family (the `body` font token), sanitized, or
+ * undefined — applied to the page root so all text inherits it. */
+export function documentFontFamily(tokens: DocumentTokens | undefined): string | undefined {
+  return sanitizeFontFamily(tokens?.fonts?.body) ?? undefined;
+}
+
+// --- Trust boundary (A03: CSS injection) ---
+/**
+ * A token value or literal background is user-supplied and gets interpolated
+ * into generated CSS / SVG, so allow only simple color forms — otherwise a
+ * value like `red; } body { ... ` could break out of a `:root`/`<style>` block.
+ * Returns the trimmed color when safe, or null so callers drop it.
  */
 export function sanitizeColor(color: string | undefined): string | null {
   if (!color) return null;
@@ -230,4 +308,27 @@ export function sanitizeColor(color: string | undefined): string | null {
   if (/^(rgb|rgba|hsl|hsla)\([0-9.,%\s/]+\)$/.test(c)) return c;
   if (/^[a-zA-Z]+$/.test(c)) return c;
   return null;
+}
+
+/**
+ * Trust boundary for a font-family value (interpolated into CSS). Allow only a
+ * font stack of names/keywords — letters, digits, spaces, commas, quotes,
+ * hyphens, underscores — so `;`/`{`/`}`/`(` can't break out of the stylesheet.
+ * Returns the trimmed value when safe, or null so callers drop it.
+ */
+export function sanitizeFontFamily(font: string | undefined): string | null {
+  if (!font) return null;
+  const f = font.trim();
+  if (!f) return null;
+  return /^[a-zA-Z0-9 ,"'_-]+$/.test(f) ? f : null;
+}
+
+/**
+ * Trust boundary for a spacing value (emitted as `<n>px`). Coerce to a finite,
+ * non-negative integer; anything else (NaN, string from external JSON, negative)
+ * returns null so callers drop it.
+ */
+export function sanitizeSpacing(value: number | undefined): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.round(value));
 }

@@ -8,11 +8,14 @@ import {
   BREAKPOINTS,
   colorTokenKey,
   isColorTokenRef,
+  isSpacingTokenRef,
   isValidTokenKey,
   makeColorTokenRef,
+  makeSpacingTokenRef,
   resolveColor,
   resolveFrame,
   resolveHidden,
+  spacingTokenKey,
   toSides,
 } from "../types/page";
 import type { DocumentTokens, NodeFrame, ShadowSpec, Sides } from "../types/page";
@@ -33,32 +36,77 @@ const SHADOW_FIELDS: { key: "x" | "y" | "blur" | "spread"; label: string }[] = [
   { key: "spread", label: "확산" },
 ];
 
-function SidesField({
-  label,
+/** The four per-side number inputs (no label/wrapper). */
+function SidesGrid({
   value,
   onChange,
 }: {
-  label: string;
   value: Sides;
   onChange: (side: keyof Sides, v: number) => void;
 }) {
   return (
+    <div className="grid grid-cols-4 gap-1">
+      {SIDES.map((s) => (
+        <div key={s.key} className="flex flex-col items-center gap-0.5">
+          <input
+            type="number"
+            title={s.label}
+            className="h-8 w-full rounded-button border border-line px-1 text-center text-xs focus:border-brand focus:outline-none"
+            value={Math.round(value[s.key])}
+            onChange={(e) => onChange(s.key, e.target.value === "" ? 0 : Number(e.target.value))}
+          />
+          <span className="text-[10px] text-muted">{s.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Padding/margin control: a literal per-side grid, or a uniform spacing token.
+ * Mirrors BackgroundControl — a token dropdown (shown only when spacing tokens
+ * exist) toggles between 커스텀 (the grid) and a token (read-only resolved px). */
+function SpacingControl({
+  label,
+  value,
+  tokens,
+  onSetSides,
+  onSetToken,
+}: {
+  label: string;
+  value: Sides | string | undefined;
+  tokens: DocumentTokens | undefined;
+  onSetSides: (side: keyof Sides, v: number) => void;
+  onSetToken: (key: string) => void;
+}) {
+  const tokenKeys = Object.keys(tokens?.spacing ?? {});
+  const isToken = isSpacingTokenRef(value);
+  const resolved = isToken ? tokens?.spacing?.[spacingTokenKey(value)] : undefined;
+
+  return (
     <div className="flex flex-col gap-1">
       <span className="text-xs font-medium text-muted">{label}</span>
-      <div className="grid grid-cols-4 gap-1">
-        {SIDES.map((s) => (
-          <div key={s.key} className="flex flex-col items-center gap-0.5">
-            <input
-              type="number"
-              title={s.label}
-              className="h-8 w-full rounded-button border border-line px-1 text-center text-xs focus:border-brand focus:outline-none"
-              value={Math.round(value[s.key])}
-              onChange={(e) => onChange(s.key, e.target.value === "" ? 0 : Number(e.target.value))}
-            />
-            <span className="text-[10px] text-muted">{s.label}</span>
-          </div>
-        ))}
-      </div>
+      {tokenKeys.length > 0 && (
+        <select
+          className={inputCls}
+          value={isToken ? spacingTokenKey(value) : ""}
+          onChange={(e) => onSetToken(e.target.value)}
+        >
+          <option value="">커스텀</option>
+          {tokenKeys.map((k) => (
+            <option key={k} value={k}>
+              토큰: {k}
+            </option>
+          ))}
+        </select>
+      )}
+      {isToken ? (
+        <span className="text-sm text-ink2">
+          토큰 <code className="text-xs">{spacingTokenKey(value)}</code>{" "}
+          {typeof resolved === "number" ? `(${resolved}px · 모든 변)` : "(미정의)"}
+        </span>
+      ) : (
+        <SidesGrid value={toSides(value, tokens)} onChange={onSetSides} />
+      )}
     </div>
   );
 }
@@ -452,6 +500,184 @@ function ColorTokenManager({
   );
 }
 
+/** Document-level font token list + add row. The `body` token becomes the
+ * page's base font (applied to the root in canvas/preview/export). */
+function FontTokenManager({
+  tokens,
+  onSet,
+  onRemove,
+}: {
+  tokens: DocumentTokens | undefined;
+  onSet: (key: string, value: string) => void;
+  onRemove: (key: string) => void;
+}) {
+  const fonts = tokens?.fonts ?? {};
+  const entries = Object.entries(fonts);
+  const [newKey, setNewKey] = useState("body");
+  const [newValue, setNewValue] = useState("Pretendard, sans-serif");
+
+  const keyTaken = newKey in fonts;
+  const canAdd = isValidTokenKey(newKey) && !keyTaken && newValue.trim() !== "";
+  const add = () => {
+    if (!canAdd) return;
+    onSet(newKey, newValue.trim());
+    setNewKey("");
+  };
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-line2 pt-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted">디자인 토큰 · 글꼴</p>
+      {entries.length === 0 ? (
+        <p className="text-xs text-muted">
+          글꼴 토큰을 추가하면 페이지 전체 글꼴을 한 번에 바꿀 수 있습니다 (이름 <code>body</code> = 페이지 기본 글꼴).
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {entries.map(([k, v]) => (
+            <div key={k} className="flex items-center gap-2">
+              <code className="w-16 shrink-0 truncate text-xs" title={k}>
+                {k}
+              </code>
+              <input
+                type="text"
+                className="h-8 flex-1 rounded-button border border-line px-2 text-xs focus:border-brand focus:outline-none"
+                style={{ fontFamily: v }}
+                value={v}
+                onChange={(e) => onSet(k, e.target.value)}
+              />
+              <button
+                onClick={() => onRemove(k)}
+                title="삭제"
+                className="h-8 shrink-0 rounded-button border border-line px-2 text-xs text-muted hover:bg-line2"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="이름 (예: body)"
+          className="h-8 w-20 shrink-0 rounded-button border border-line px-2 text-xs focus:border-brand focus:outline-none"
+          value={newKey}
+          onChange={(e) => setNewKey(e.target.value)}
+        />
+        <input
+          type="text"
+          placeholder="글꼴 (예: Pretendard, sans-serif)"
+          className="h-8 flex-1 rounded-button border border-line px-2 text-xs focus:border-brand focus:outline-none"
+          value={newValue}
+          onChange={(e) => setNewValue(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && add()}
+        />
+        <button
+          onClick={add}
+          disabled={!canAdd}
+          className="h-8 shrink-0 rounded-button border border-line px-3 text-xs font-medium text-ink2 hover:bg-line2 disabled:opacity-40"
+        >
+          추가
+        </button>
+      </div>
+      {newKey && !isValidTokenKey(newKey) && (
+        <p className="text-[11px] text-red-500">이름은 영문자로 시작, 영문·숫자·하이픈만.</p>
+      )}
+      {keyTaken && <p className="text-[11px] text-red-500">이미 있는 이름입니다.</p>}
+    </div>
+  );
+}
+
+/** Document-level spacing token list + add row. Padding/margin can reference a
+ * spacing token (uniform) via SpacingControl; editing the value updates all refs. */
+function SpacingTokenManager({
+  tokens,
+  onSet,
+  onRemove,
+}: {
+  tokens: DocumentTokens | undefined;
+  onSet: (key: string, value: number) => void;
+  onRemove: (key: string) => void;
+}) {
+  const spacing = tokens?.spacing ?? {};
+  const entries = Object.entries(spacing);
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState(16);
+
+  const keyTaken = newKey in spacing;
+  const canAdd = isValidTokenKey(newKey) && !keyTaken;
+  const add = () => {
+    if (!canAdd) return;
+    onSet(newKey, newValue);
+    setNewKey("");
+  };
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-line2 pt-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted">디자인 토큰 · 간격</p>
+      {entries.length === 0 ? (
+        <p className="text-xs text-muted">
+          간격 토큰(예: <code>md</code> = 16)을 추가하면 패딩·마진에서 재사용하고 한 번에 바꿀 수 있습니다.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {entries.map(([k, v]) => (
+            <div key={k} className="flex items-center gap-2">
+              <code className="w-16 shrink-0 truncate text-xs" title={k}>
+                {k}
+              </code>
+              <input
+                type="number"
+                min={0}
+                className="h-8 flex-1 rounded-button border border-line px-2 text-xs focus:border-brand focus:outline-none"
+                value={v}
+                onChange={(e) => onSet(k, e.target.value === "" ? 0 : Number(e.target.value))}
+              />
+              <span className="text-xs text-muted">px</span>
+              <button
+                onClick={() => onRemove(k)}
+                title="삭제"
+                className="h-8 shrink-0 rounded-button border border-line px-2 text-xs text-muted hover:bg-line2"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="이름 (예: md)"
+          className="h-8 w-24 shrink-0 rounded-button border border-line px-2 text-xs focus:border-brand focus:outline-none"
+          value={newKey}
+          onChange={(e) => setNewKey(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && add()}
+        />
+        <input
+          type="number"
+          min={0}
+          className="h-8 w-20 rounded-button border border-line px-2 text-xs focus:border-brand focus:outline-none"
+          value={newValue}
+          onChange={(e) => setNewValue(e.target.value === "" ? 0 : Number(e.target.value))}
+        />
+        <span className="text-xs text-muted">px</span>
+        <button
+          onClick={add}
+          disabled={!canAdd}
+          className="h-8 shrink-0 rounded-button border border-line px-3 text-xs font-medium text-ink2 hover:bg-line2 disabled:opacity-40"
+        >
+          추가
+        </button>
+      </div>
+      {newKey && !isValidTokenKey(newKey) && (
+        <p className="text-[11px] text-red-500">이름은 영문자로 시작, 영문·숫자·하이픈만.</p>
+      )}
+      {keyTaken && <p className="text-[11px] text-red-500">이미 있는 이름입니다.</p>}
+    </div>
+  );
+}
+
 export function InspectorPane() {
   const selectedIds = useEditorStore((s) => s.selectedIds);
   const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
@@ -471,9 +697,14 @@ export function InspectorPane() {
   const tokens = useEditorStore((s) => s.document?.meta.tokens);
   const setColorToken = useEditorStore((s) => s.setColorToken);
   const removeColorToken = useEditorStore((s) => s.removeColorToken);
+  const setFontToken = useEditorStore((s) => s.setFontToken);
+  const removeFontToken = useEditorStore((s) => s.removeFontToken);
+  const setSpacingToken = useEditorStore((s) => s.setSpacingToken);
+  const removeSpacingToken = useEditorStore((s) => s.removeSpacingToken);
   const updateNodeShadow = useEditorStore((s) => s.updateNodeShadow);
   const clearNodeShadow = useEditorStore((s) => s.clearNodeShadow);
   const updateNodeSpacing = useEditorStore((s) => s.updateNodeSpacing);
+  const setNodeSpacingValue = useEditorStore((s) => s.setNodeSpacingValue);
   const bp = useEditorStore((s) => s.activeBreakpoint);
   const setNodeHidden = useEditorStore((s) => s.setNodeHidden);
   const resetOverride = useEditorStore((s) => s.resetOverride);
@@ -622,20 +853,36 @@ export function InspectorPane() {
                 )}
               </div>
               {def.isContainer && (
-                <SidesField
+                <SpacingControl
                   label="패딩"
-                  value={toSides(node.padding)}
-                  onChange={(side, v) =>
+                  value={node.padding}
+                  tokens={tokens}
+                  onSetSides={(side, v) =>
                     updateNodeSpacing(selectedId, { padding: { [side]: v } })
+                  }
+                  onSetToken={(key) =>
+                    setNodeSpacingValue(
+                      selectedId,
+                      "padding",
+                      key === "" ? toSides(node.padding, tokens) : makeSpacingTokenRef(key),
+                    )
                   }
                 />
               )}
               {!isRoot && (
-                <SidesField
+                <SpacingControl
                   label="마진"
-                  value={toSides(node.margin)}
-                  onChange={(side, v) =>
+                  value={node.margin}
+                  tokens={tokens}
+                  onSetSides={(side, v) =>
                     updateNodeSpacing(selectedId, { margin: { [side]: v } })
+                  }
+                  onSetToken={(key) =>
+                    setNodeSpacingValue(
+                      selectedId,
+                      "margin",
+                      key === "" ? toSides(node.margin, tokens) : makeSpacingTokenRef(key),
+                    )
                   }
                 />
               )}
@@ -690,6 +937,12 @@ export function InspectorPane() {
           tokens={tokens}
           onSet={setColorToken}
           onRemove={removeColorToken}
+        />
+        <FontTokenManager tokens={tokens} onSet={setFontToken} onRemove={removeFontToken} />
+        <SpacingTokenManager
+          tokens={tokens}
+          onSet={setSpacingToken}
+          onRemove={removeSpacingToken}
         />
       </div>
     </section>

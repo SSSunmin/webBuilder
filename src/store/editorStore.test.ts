@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getBlockDef, getComponentDef, listBlocks } from "../registry";
-import { resolveFrame, resolveHidden } from "../types/page";
+import { makeSpacingTokenRef, resolveFrame, resolveHidden } from "../types/page";
 import { findParentChild, useEditorStore } from "./editorStore";
 
 const store = () => useEditorStore.getState();
@@ -573,6 +573,47 @@ describe("updateNodeSpacing", () => {
       bottom: 0,
       left: 12,
     });
+  });
+
+  it("editing a side converts a token-ref padding to explicit per-side numbers", () => {
+    const id = addAt(0, 0, 100, 40);
+    store().setSpacingToken("md", 16);
+    store().setNodeSpacingValue(id, "padding", makeSpacingTokenRef("md"));
+    // Editing one side resolves the token (16 all round) then overrides top.
+    store().updateNodeSpacing(id, { padding: { top: 4 } });
+    expect(store().document!.nodes[id].padding).toEqual({
+      top: 4,
+      right: 16,
+      bottom: 16,
+      left: 16,
+    });
+  });
+});
+
+describe("design tokens", () => {
+  it("ignores invalid token keys for fonts and spacing", () => {
+    store().setFontToken("1bad", "Inter"); // must start with a letter
+    store().setSpacingToken("with space", 8);
+    const tokens = store().document!.meta.tokens;
+    expect(tokens?.fonts).toBeUndefined();
+    expect(tokens?.spacing).toBeUndefined();
+  });
+
+  it("removing a spacing token leaves a referencing node's ref dangling (node survives)", () => {
+    const id = addAt(0, 0, 100, 40);
+    store().setSpacingToken("md", 16);
+    store().setNodeSpacingValue(id, "padding", makeSpacingTokenRef("md"));
+    store().removeSpacingToken("md");
+    expect(store().document!.meta.tokens?.spacing?.md).toBeUndefined();
+    expect(store().document!.nodes[id].padding).toBe(makeSpacingTokenRef("md")); // ref preserved
+  });
+
+  it("duplicateNode copies a token-ref padding as-is (no string spread)", () => {
+    const id = addAt(0, 0, 100, 40);
+    store().setSpacingToken("md", 16);
+    store().setNodeSpacingValue(id, "padding", makeSpacingTokenRef("md"));
+    const dup = store().duplicateNode(id)!;
+    expect(store().document!.nodes[dup].padding).toBe(makeSpacingTokenRef("md"));
   });
 });
 

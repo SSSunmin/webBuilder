@@ -5,7 +5,15 @@ import { getComponentDef } from "../registry";
 import { guideStore } from "../canvas/guideStore";
 import { domSnapContext, snapResize } from "../canvas/snap";
 import { useEditorStore } from "../store/editorStore";
-import { BREAKPOINTS, resolveColor, resolveFrame, resolveHidden, shadowCss, toSides } from "../types/page";
+import {
+  BREAKPOINTS,
+  documentFontFamily,
+  resolveColor,
+  resolveFrame,
+  resolveHidden,
+  shadowCss,
+  toSides,
+} from "../types/page";
 
 /** Recursively renders a node and its subtree on the canvas with absolute
  * positioning, wired for selection, drag-to-move, drop (containers), resize. */
@@ -16,6 +24,7 @@ export function NodeView({ nodeId }: { nodeId: string }) {
   const background = useEditorStore((s) =>
     resolveColor(s.document?.nodes[nodeId]?.background, s.document?.meta.tokens),
   );
+  const tokens = useEditorStore((s) => s.document?.meta.tokens);
   const rootId = useEditorStore((s) => s.document?.rootId);
   const selected = useEditorStore((s) => s.selectedIds.includes(nodeId));
   const onlySelected = useEditorStore(
@@ -43,8 +52,8 @@ export function NodeView({ nodeId }: { nodeId: string }) {
   const frame = resolveFrame(node, bp);
   const hidden = resolveHidden(node, bp);
 
-  const pad = toSides(node.padding);
-  const mar = toSides(node.margin);
+  const pad = toSides(node.padding, tokens);
+  const mar = toSides(node.margin, tokens);
   const hasPadding = pad.top || pad.right || pad.bottom || pad.left;
 
   const setRefs = (el: HTMLElement | null) => {
@@ -111,6 +120,8 @@ export function NodeView({ nodeId }: { nodeId: string }) {
         background,
         borderRadius: node.borderRadius,
         boxShadow,
+        // Base font applied at the root so all nodes inherit it (mirrors export).
+        fontFamily: documentFontFamily(tokens),
       }
     : {
         position: "absolute",
