@@ -1,10 +1,10 @@
 ---
 type: Reference
 title: 데이터 모델 — PageDocument / PageNode
-description: 저장 단위인 PageDocument와 노드 트리를 구성하는 PageNode, NodeFrame, Sides, NodeOverride, EventBinding 타입 정의.
+description: 저장 단위인 PageDocument와 노드 트리를 구성하는 PageNode, NodeFrame, Sides, DocumentTokens, NodeOverride, EventBinding 타입 정의. v2에서 글꼴·간격 토큰 추가.
 resource: src/types/page.ts, src/types/events.ts, src/types/component.ts
-tags: [data-model, types, page, node]
-timestamp: 2026-06-22
+tags: [data-model, types, page, node, design-tokens]
+timestamp: 2026-06-29
 ---
 
 # 데이터 모델 — PageDocument / PageNode
@@ -24,12 +24,14 @@ interface PageDocument {
     createdAt: string; // ISO 8601
     updatedAt: string; // ISO 8601
     thumbnail?: string;
+    tokens?: DocumentTokens; // 문서 전역 디자인 토큰 (v1: colors, v2: +fonts, +spacing)
   };
 }
 ```
 
 - `nodes`는 id를 키로 하는 **정규화 맵**. 부모-자식 관계는 `PageNode.children` 배열(id 목록)로만 연결한다.
 - 루트 노드는 항상 `"Layout"` 타입으로 생성된다 (`createDocument()` 참조).
+- `meta.tokens`는 선택 필드다 — 없으면 `undefined`이며 토큰 없는 문서와 완전 하위 호환.
 
 ## PageMeta — 홈 목록용 경량 메타
 
@@ -53,15 +55,17 @@ interface PageNode {
   props: Record<string, unknown>;
   children: string[];    // 자식 노드 id 배열 (isContainer=true 일 때만 채워짐)
   frame: NodeFrame;      // 부모 박스 기준 절대 좌표·크기
-  background?: string;   // CSS 색상 문자열
+  background?: string;   // CSS 색상 문자열, 또는 `token:<key>` 색상 토큰 참조
   borderRadius?: number; // px
   boxShadow?: ShadowSpec; // 픽셀 그림자 {x,y,blur,spread,color,opacity}; 없음=undefined
-  padding?: Sides;       // 내부 패딩 (children snap 기준)
-  margin?: Sides;        // 외부 마진 (siblings snap 시 간격 확보)
+  padding?: Sides | string; // 내부 패딩. Sides(명시적) 또는 `token:<key>` 간격 토큰 참조(균일 적용)
+  margin?: Sides | string;  // 외부 마진. Sides(명시적) 또는 `token:<key>` 간격 토큰 참조(균일 적용)
   overrides?: Partial<Record<Exclude<BreakpointId, "desktop">, NodeOverride>>;
   events?: EventBinding[];
 }
 ```
+
+토큰 참조(`token:<key>`)는 dangling(토큰이 삭제·미정의)이면 해당 속성을 무시한다(background → 배경 없음, padding/margin → 0). 지어낸 값으로 fallback하지 않는다.
 
 ## ShadowSpec — 픽셀 그림자
 
@@ -104,7 +108,59 @@ interface Sides {
 const ZERO_SIDES: Sides = { top: 0, right: 0, bottom: 0, left: 0 };
 ```
 
-`toSides(v)` 헬퍼가 `number | Sides | undefined | null`을 `Sides`로 정규화한다.
+`toSides(v, tokens?)` 헬퍼가 `Sides | number | string | undefined | null`을 `Sides`로 정규화한다.
+
+```ts
+function toSides(
+  v: Sides | number | string | undefined | null,
+  tokens?: DocumentTokens,
+): Sides
+```
+
+- `null / undefined` → `ZERO_SIDES`
+- `string` → `token:<key>` 간격 참조로 해석: `tokens.spacing[key]`를 `sanitizeSpacing`으로 검증 후 4면 균일 적용. dangling/unsafe → `ZERO_SIDES`
+- `number` → 4면 균일 적용
+- `Sides` → 그대로 반환 (각 면 `?? 0` 방어)
+
+## DocumentTokens — 문서 전역 디자인 토큰
+
+```ts
+interface DocumentTokens {
+  colors?:  Record<string, string>; // 이름 → CSS 색상 값 (v1)
+  fonts?:   Record<string, string>; // 이름 → font-family 스택 (v2)
+  spacing?: Record<string, number>; // 이름 → px 값 (v2)
+}
+```
+
+`PageDocument.meta.tokens`에 보관된다. 세 카테고리 모두 선택 필드다.
+
+### 토큰 참조 모델
+
+노드가 토큰을 참조하는 방법은 **필드 네임스페이스**로 구분된다:
+
+| 토큰 카테고리 | 참조 필드 | 센티넬 형태 | CSS 변수명 |
+|---|---|---|---|
+| colors | `node.background` | `token:<key>` | `--color-<key>` |
+| spacing | `node.padding`, `node.margin` | `token:<key>` | `--space-<key>` |
+| fonts | 노드별 참조 없음 | — | `--font-<key>` |
+
+**글꼴 토큰**은 노드별 참조 방식이 없다. `body` 키의 font-family가 페이지 루트 노드에 `font-family: var(--font-body)`로 전역 적용되어 모든 텍스트 자식이 상속한다.
+
+### 토큰 키 규칙
+
+`isValidTokenKey(key)`: `/^[a-zA-Z][a-zA-Z0-9-]*$/` — 첫 글자 영문자, 이후 영문자·숫자·하이픈. CSS 식별자처럼 쓸 수 있도록 제한한다.
+
+### 신뢰경계 (A03: CSS 인젝션 차단)
+
+토큰 값은 사용자 입력이므로 CSS로 직접 방출될 때 아래 화이트리스트로 검증한다(코드 export 레이어 기준):
+
+| 함수 | 허용 패턴 | 드롭 조건 |
+|---|---|---|
+| `sanitizeColor(v)` | hex, rgb/rgba/hsl/hsla 함수형, 단어 키워드 | 그 외 |
+| `sanitizeFontFamily(v)` | `[a-zA-Z0-9 ,"'_-]+` | `; { } (` 등 포함 시 |
+| `sanitizeSpacing(v)` | 유한한 비음수 number → 정수로 반올림 | NaN, 무한, 음수, 비number |
+
+unsafe 값은 `:root` 선언과 `var()` 참조 **양쪽**에서 드롭된다.
 
 ## BreakpointId 및 BREAKPOINTS
 
