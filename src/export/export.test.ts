@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useEditorStore } from "../store/editorStore";
+import { makeColorTokenRef } from "../types/page";
 import { generateSpec } from "./spec";
 import { generateCode } from "./code";
 
@@ -245,12 +246,15 @@ describe("responsive media queries", () => {
     expect(code).not.toContain("@media");
   });
 
-  it("escapes backticks/${ in a background value so the <style> literal can't be broken out of", () => {
+  it("drops a background value that tries to break out of the <style> literal", () => {
     const { childId } = buildDoc();
     useEditorStore.getState().setNodeBackground(childId, "red`}</style><script>x</script>${y}");
     const code = generateCode(useEditorStore.getState().document!);
-    // No raw backtick or ${ survives inside the generated source — both escaped.
-    expect(code).toContain("background: red\\`}</style><script>x</script>\\${y}");
+    // sanitizeColor only allows simple color forms, so the malicious value is
+    // dropped entirely rather than emitted (escaped or otherwise). (The page's
+    // own legitimate <style>…</style> wrapper is always present, so we check the
+    // injected markers, not the closing tag.)
+    expect(code).not.toContain("<script>");
     expect(code).not.toContain("red`}");
   });
 });
@@ -475,5 +479,74 @@ describe("cyclic children defense", () => {
 
   it("generateSpec does not throw on cyclic children", () => {
     expect(() => generateSpec(cyclicDoc())).not.toThrow();
+  });
+});
+
+describe("color token export", () => {
+  /** Document with one Card that references a `brand` color token. */
+  function tokenDoc() {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Tokens");
+    const child = useEditorStore.getState().addNode(doc.rootId, "Card")!;
+    useEditorStore.getState().setColorToken("brand", "#3b82f6");
+    useEditorStore.getState().setNodeBackground(child, makeColorTokenRef("brand"));
+    return { document: useEditorStore.getState().document!, child };
+  }
+
+  it("emits a :root block and var() reference in generated code", () => {
+    const { document } = tokenDoc();
+    const code = generateCode(document);
+    expect(code).toContain(":root {");
+    expect(code).toContain("--color-brand: #3b82f6;");
+    expect(code).toContain("background: var(--color-brand)");
+  });
+
+  it("changing the token value flows to every reference in one place", () => {
+    const { document } = tokenDoc();
+    expect(generateCode(document)).toContain("--color-brand: #3b82f6;");
+    useEditorStore.getState().setColorToken("brand", "#ef4444");
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain("--color-brand: #ef4444;"); // single source of truth
+    expect(code).toContain("background: var(--color-brand)"); // node ref unchanged
+  });
+
+  it("lists tokens and resolved bg in the spec", () => {
+    const { document } = tokenDoc();
+    const spec = generateSpec(document);
+    expect(spec).toContain("## 디자인 토큰 (색상)");
+    expect(spec).toContain("`brand`: `#3b82f6`");
+    expect(spec).toContain("bg token brand (#3b82f6)");
+  });
+
+  it("a dangling ref (deleted token) drops the background, not the node", () => {
+    const { document, child } = tokenDoc();
+    useEditorStore.getState().removeColorToken("brand");
+    const d = useEditorStore.getState().document!;
+    const code = generateCode(d);
+    expect(code).not.toContain(":root {"); // no tokens left
+    expect(code).not.toContain("var(--color-brand)"); // ref no longer emitted
+    expect(d.nodes[child]).toBeDefined(); // node survives
+    expect(generateSpec(d)).toContain("bg token brand (미정의)");
+  });
+
+  it("drops a token whose value would break out of the stylesheet (CSS injection)", () => {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Injection");
+    const child = useEditorStore.getState().addNode(doc.rootId, "Card")!;
+    // Malicious token value trying to escape the :root block.
+    useEditorStore.getState().setColorToken("evil", "red; } body { display: none");
+    useEditorStore.getState().setNodeBackground(child, makeColorTokenRef("evil"));
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).not.toContain("display: none"); // value never reaches the CSS
+    expect(code).not.toContain("var(--color-evil)"); // unsafe token isn't referenced
+  });
+
+  it("drops a literal background that would break out of the stylesheet", () => {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Injection");
+    const child = useEditorStore.getState().addNode(doc.rootId, "Card")!;
+    useEditorStore.getState().setNodeBackground(child, "#fff; } * { color: red");
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).not.toContain("* { color: red"); // injection neutralized
   });
 });

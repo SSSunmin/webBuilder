@@ -1,6 +1,14 @@
 import { getComponentDef } from "../registry";
-import type { BreakpointId, PageDocument, PageNode, Sides } from "../types/page";
-import { BREAKPOINTS, resolveFrame, resolveHidden, toSides } from "../types/page";
+import type { BreakpointId, DocumentTokens, PageDocument, PageNode, Sides } from "../types/page";
+import {
+  BREAKPOINTS,
+  colorTokenKey,
+  isColorTokenRef,
+  resolveColor,
+  resolveFrame,
+  resolveHidden,
+  toSides,
+} from "../types/page";
 import { describeEvent } from "../types/events";
 
 /** Breakpoints (excluding desktop base) that carry overrides, in order. */
@@ -64,11 +72,19 @@ function spacingSummary(sides: Sides): string | null {
   return `${top}/${right}/${bottom}/${left}`;
 }
 
-function frameSummary(node: PageNode, isRoot: boolean): string {
+/** Describe a background: a literal color, or a token reference with its
+ * resolved value (or "미정의" when the token no longer exists). */
+function bgSummary(bg: string, tokens: DocumentTokens | undefined): string {
+  if (!isColorTokenRef(bg)) return `bg ${bg}`;
+  const resolved = resolveColor(bg, tokens);
+  return `bg token ${colorTokenKey(bg)} (${resolved ?? "미정의"})`;
+}
+
+function frameSummary(node: PageNode, isRoot: boolean, tokens: DocumentTokens | undefined): string {
   const f = node.frame;
   const size = `${f.w}×${f.h}`;
   const pos = isRoot ? size : `@(${f.x},${f.y}) ${size}`;
-  const parts = [node.background ? `${pos}, bg ${node.background}` : pos];
+  const parts = [node.background ? `${pos}, ${bgSummary(node.background, tokens)}` : pos];
   if (node.borderRadius) parts.push(`radius ${node.borderRadius}`);
   if (node.boxShadow) {
     const sh = node.boxShadow;
@@ -101,6 +117,7 @@ function renderNode(
   const line = `${indent}- **${def?.label ?? node.type}**${kind} — ${frameSummary(
     node,
     isRoot,
+    doc.meta.tokens,
   )}${summary ? ` — ${summary}` : ""}`;
   const lines = [line, ...overrideLines(node, depth), ...eventLines(node, depth)];
   for (const childId of node.children) {
@@ -109,9 +126,20 @@ function renderNode(
   return lines;
 }
 
+/** A "디자인 토큰" section listing defined color tokens, or "" when none. */
+function tokensSection(tokens: DocumentTokens | undefined): string {
+  const colors = tokens?.colors;
+  const entries = colors ? Object.entries(colors) : [];
+  if (!entries.length) return "";
+  // Wrap the value in a code span too so markdown metacharacters in a
+  // user-supplied color can't inject links/formatting into the spec.
+  const lines = entries.map(([k, v]) => `- \`${k}\`: \`${v}\``);
+  return `\n## 디자인 토큰 (색상)\n\n${lines.join("\n")}\n`;
+}
+
 /** Human/AI-readable markdown spec of the page (tree + position/size + props). */
 export function generateSpec(doc: PageDocument): string {
   const header = `# Page: ${doc.meta.name}`;
   const tree = renderNode(doc, doc.rootId, 0, true).join("\n");
-  return `${header}\n\n${tree}\n`;
+  return `${header}\n${tokensSection(doc.meta.tokens)}\n${tree}\n`;
 }

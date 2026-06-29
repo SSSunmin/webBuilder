@@ -5,12 +5,17 @@ import { getComponentDef } from "../registry";
 import { guideStore } from "../canvas/guideStore";
 import { domSnapContext, snapResize } from "../canvas/snap";
 import { useEditorStore } from "../store/editorStore";
-import { BREAKPOINTS, resolveFrame, resolveHidden, shadowCss, toSides } from "../types/page";
+import { BREAKPOINTS, resolveColor, resolveFrame, resolveHidden, shadowCss, toSides } from "../types/page";
 
 /** Recursively renders a node and its subtree on the canvas with absolute
  * positioning, wired for selection, drag-to-move, drop (containers), resize. */
 export function NodeView({ nodeId }: { nodeId: string }) {
   const node = useEditorStore((s) => s.document?.nodes[nodeId]);
+  // Resolve a token-referencing background to its literal color, selecting the
+  // computed string so the canvas re-renders live when the token value changes.
+  const background = useEditorStore((s) =>
+    resolveColor(s.document?.nodes[nodeId]?.background, s.document?.meta.tokens),
+  );
   const rootId = useEditorStore((s) => s.document?.rootId);
   const selected = useEditorStore((s) => s.selectedIds.includes(nodeId));
   const onlySelected = useEditorStore(
@@ -103,7 +108,7 @@ export function NodeView({ nodeId }: { nodeId: string }) {
         width: rootWidth,
         height: frame.h,
         margin: "0 auto",
-        background: node.background,
+        background,
         borderRadius: node.borderRadius,
         boxShadow,
       }
@@ -113,7 +118,7 @@ export function NodeView({ nodeId }: { nodeId: string }) {
         top: frame.y,
         width: frame.w,
         height: frame.h,
-        background: node.background,
+        background,
         borderRadius: node.borderRadius,
         boxShadow,
         transform: CSS.Translate.toString(transform),

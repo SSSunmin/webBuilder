@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SHADOW, ZERO_SIDES, resolveFrame, resolveHidden, shadowCss, toSides } from "./page";
+import {
+  DEFAULT_SHADOW,
+  ZERO_SIDES,
+  colorTokenKey,
+  colorTokenVar,
+  isColorTokenRef,
+  isValidTokenKey,
+  makeColorTokenRef,
+  resolveColor,
+  resolveFrame,
+  resolveHidden,
+  shadowCss,
+  toSides,
+} from "./page";
 import type { PageNode } from "./page";
 
 describe("shadowCss", () => {
@@ -28,6 +41,41 @@ describe("shadowCss", () => {
     expect(shadowCss({ ...base, color: "" })).toContain("rgba(0, 0, 0, 1)");
     expect(shadowCss({ ...base, color: "#gg0000" })).toContain("rgba(0, 0, 0, 1)");
     expect(shadowCss({ ...base, color: "#ff000080" })).toContain("rgba(255, 0, 0, 1)");
+  });
+});
+
+describe("color tokens", () => {
+  it("validates token keys as CSS-identifier-like", () => {
+    expect(isValidTokenKey("brand")).toBe(true);
+    expect(isValidTokenKey("brand-500")).toBe(true);
+    expect(isValidTokenKey("1brand")).toBe(false); // must start with a letter
+    expect(isValidTokenKey("brand color")).toBe(false); // no spaces
+    expect(isValidTokenKey("")).toBe(false);
+  });
+
+  it("round-trips a ref through make/is/key", () => {
+    const ref = makeColorTokenRef("brand");
+    expect(ref).toBe("token:brand");
+    expect(isColorTokenRef(ref)).toBe(true);
+    expect(isColorTokenRef("#ff0000")).toBe(false);
+    expect(isColorTokenRef(undefined)).toBe(false);
+    expect(colorTokenKey(ref)).toBe("brand");
+  });
+
+  it("maps a key to a CSS custom property name", () => {
+    expect(colorTokenVar("brand")).toBe("--color-brand");
+  });
+
+  it("resolves a ref to its token value, passes literals through", () => {
+    const tokens = { colors: { brand: "#3b82f6" } };
+    expect(resolveColor(makeColorTokenRef("brand"), tokens)).toBe("#3b82f6");
+    expect(resolveColor("#ff0000", tokens)).toBe("#ff0000");
+    expect(resolveColor(undefined, tokens)).toBeUndefined();
+  });
+
+  it("resolves a dangling ref (deleted token) to undefined", () => {
+    expect(resolveColor(makeColorTokenRef("gone"), { colors: {} })).toBeUndefined();
+    expect(resolveColor(makeColorTokenRef("brand"), undefined)).toBeUndefined();
   });
 });
 

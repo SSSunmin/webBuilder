@@ -1,10 +1,21 @@
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { getComponentDef } from "../registry";
 import { iconDefs } from "../registry/icons";
 import { useEditorStore } from "../store/editorStore";
 import type { PropSchema } from "../types/component";
-import { BREAKPOINTS, resolveFrame, resolveHidden, toSides } from "../types/page";
-import type { NodeFrame, ShadowSpec, Sides } from "../types/page";
+import {
+  BREAKPOINTS,
+  colorTokenKey,
+  isColorTokenRef,
+  isValidTokenKey,
+  makeColorTokenRef,
+  resolveColor,
+  resolveFrame,
+  resolveHidden,
+  toSides,
+} from "../types/page";
+import type { DocumentTokens, NodeFrame, ShadowSpec, Sides } from "../types/page";
 import { ACTION_TYPES, EVENT_TRIGGERS } from "../types/events";
 import type { ActionType, EventBinding, EventTrigger } from "../types/events";
 
@@ -269,6 +280,178 @@ function FrameField({
   );
 }
 
+const HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
+
+/** Background picker that can point at a literal color or a color token. A token
+ * reference shows a read-only resolved swatch (the native color input can't hold
+ * a `token:` value); a literal shows the editable picker + text + 투명 button. */
+function BackgroundControl({
+  background,
+  tokens,
+  onChange,
+}: {
+  background: string | undefined;
+  tokens: DocumentTokens | undefined;
+  onChange: (value: string) => void;
+}) {
+  const tokenKeys = Object.keys(tokens?.colors ?? {});
+  const isToken = isColorTokenRef(background);
+  const resolved = resolveColor(background, tokens);
+
+  const onSelect = (v: string) => {
+    // "" → literal color, seeded from whatever color is showing now.
+    onChange(v === "" ? resolved ?? "" : makeColorTokenRef(v));
+  };
+
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted">배경색</span>
+      {tokenKeys.length > 0 && (
+        <select
+          className={inputCls}
+          value={isToken ? colorTokenKey(background!) : ""}
+          onChange={(e) => onSelect(e.target.value)}
+        >
+          <option value="">커스텀 색상</option>
+          {tokenKeys.map((k) => (
+            <option key={k} value={k}>
+              토큰: {k}
+            </option>
+          ))}
+        </select>
+      )}
+      {isToken ? (
+        <div className="flex items-center gap-2">
+          <span
+            className="h-9 w-10 shrink-0 rounded-button border border-line"
+            style={{ background: resolved ?? "transparent" }}
+          />
+          <span className="text-sm text-ink2">
+            토큰 <code className="text-xs">{colorTokenKey(background!)}</code>
+            {resolved ? "" : " (미정의)"}
+          </span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            className="h-9 w-10 rounded-button border border-line"
+            value={background || "#ffffff"}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="비우면 투명"
+            className={inputCls}
+            value={background ?? ""}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <button
+            onClick={() => onChange("")}
+            className="h-9 shrink-0 rounded-button border border-line px-2 text-xs text-muted hover:bg-line2"
+          >
+            투명
+          </button>
+        </div>
+      )}
+    </label>
+  );
+}
+
+/** Document-level color token list + add row. Editing a token's value updates
+ * every node that references it (canvas + export) at once. */
+function ColorTokenManager({
+  tokens,
+  onSet,
+  onRemove,
+}: {
+  tokens: DocumentTokens | undefined;
+  onSet: (key: string, value: string) => void;
+  onRemove: (key: string) => void;
+}) {
+  const colors = tokens?.colors ?? {};
+  const entries = Object.entries(colors);
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("#3b82f6");
+
+  const keyTaken = newKey in colors;
+  const canAdd = isValidTokenKey(newKey) && !keyTaken;
+  const add = () => {
+    if (!canAdd) return;
+    onSet(newKey, newValue);
+    setNewKey("");
+  };
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-line2 pt-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+        디자인 토큰 · 색상
+      </p>
+      {entries.length === 0 ? (
+        <p className="text-xs text-muted">
+          색상 토큰을 추가하면 여러 노드에서 재사용하고 한 번에 바꿀 수 있습니다.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {entries.map(([k, v]) => (
+            <div key={k} className="flex items-center gap-2">
+              <input
+                type="color"
+                className="h-8 w-9 shrink-0 rounded-button border border-line"
+                value={HEX_RE.test(v) ? v : "#ffffff"}
+                onChange={(e) => onSet(k, e.target.value)}
+              />
+              <code className="w-16 shrink-0 truncate text-xs" title={k}>
+                {k}
+              </code>
+              <input
+                type="text"
+                className="h-8 flex-1 rounded-button border border-line px-2 text-xs focus:border-brand focus:outline-none"
+                value={v}
+                onChange={(e) => onSet(k, e.target.value)}
+              />
+              <button
+                onClick={() => onRemove(k)}
+                title="삭제"
+                className="h-8 shrink-0 rounded-button border border-line px-2 text-xs text-muted hover:bg-line2"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          className="h-8 w-9 shrink-0 rounded-button border border-line"
+          value={HEX_RE.test(newValue) ? newValue : "#ffffff"}
+          onChange={(e) => setNewValue(e.target.value)}
+        />
+        <input
+          type="text"
+          placeholder="이름 (예: brand)"
+          className="h-8 w-24 shrink-0 rounded-button border border-line px-2 text-xs focus:border-brand focus:outline-none"
+          value={newKey}
+          onChange={(e) => setNewKey(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && add()}
+        />
+        <button
+          onClick={add}
+          disabled={!canAdd}
+          className="h-8 shrink-0 rounded-button border border-line px-3 text-xs font-medium text-ink2 hover:bg-line2 disabled:opacity-40"
+        >
+          추가
+        </button>
+      </div>
+      {newKey && !isValidTokenKey(newKey) && (
+        <p className="text-[11px] text-red-500">이름은 영문자로 시작, 영문·숫자·하이픈만.</p>
+      )}
+      {keyTaken && <p className="text-[11px] text-red-500">이미 있는 이름입니다.</p>}
+    </div>
+  );
+}
+
 export function InspectorPane() {
   const selectedIds = useEditorStore((s) => s.selectedIds);
   const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
@@ -285,6 +468,9 @@ export function InspectorPane() {
   const updateNodeFrame = useEditorStore((s) => s.updateNodeFrame);
   const setNodeBackground = useEditorStore((s) => s.setNodeBackground);
   const setNodeRadius = useEditorStore((s) => s.setNodeRadius);
+  const tokens = useEditorStore((s) => s.document?.meta.tokens);
+  const setColorToken = useEditorStore((s) => s.setColorToken);
+  const removeColorToken = useEditorStore((s) => s.removeColorToken);
   const updateNodeShadow = useEditorStore((s) => s.updateNodeShadow);
   const clearNodeShadow = useEditorStore((s) => s.clearNodeShadow);
   const updateNodeSpacing = useEditorStore((s) => s.updateNodeSpacing);
@@ -308,7 +494,7 @@ export function InspectorPane() {
       <h2 className="border-b border-line px-4 py-2 text-sm font-semibold">
         속성{def ? ` · ${def.label}` : ""}
       </h2>
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex flex-1 flex-col gap-4 overflow-auto p-4">
         {selectedIds.length >= 2 ? (
           <p className="text-sm text-muted">
             여러 개 선택됨 ({selectedIds.length}). 캔버스 상단의 정렬 도구를
@@ -357,30 +543,11 @@ export function InspectorPane() {
                 <FrameField label="너비(W)" value={frame!.w} onChange={(v) => setFrame("w", v)} />
                 <FrameField label="높이(H)" value={frame!.h} onChange={(v) => setFrame("h", v)} />
               </div>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-muted">배경색</span>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    className="h-9 w-10 rounded-button border border-line"
-                    value={node.background || "#ffffff"}
-                    onChange={(e) => setNodeBackground(selectedId, e.target.value)}
-                  />
-                  <input
-                    type="text"
-                    placeholder="비우면 투명"
-                    className={inputCls}
-                    value={node.background ?? ""}
-                    onChange={(e) => setNodeBackground(selectedId, e.target.value)}
-                  />
-                  <button
-                    onClick={() => setNodeBackground(selectedId, "")}
-                    className="h-9 shrink-0 rounded-button border border-line px-2 text-xs text-muted hover:bg-line2"
-                  >
-                    투명
-                  </button>
-                </div>
-              </label>
+              <BackgroundControl
+                background={node.background}
+                tokens={tokens}
+                onChange={(v) => setNodeBackground(selectedId, v)}
+              />
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-muted">모서리 둥글기(px)</span>
                 <input
@@ -519,6 +686,11 @@ export function InspectorPane() {
             </div>
           </div>
         )}
+        <ColorTokenManager
+          tokens={tokens}
+          onSet={setColorToken}
+          onRemove={removeColorToken}
+        />
       </div>
     </section>
   );
