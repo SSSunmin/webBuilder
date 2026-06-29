@@ -1,7 +1,14 @@
 import type { CSSProperties, ReactNode } from "react";
 import { getComponentDef } from "../registry";
 import { useEditorStore } from "../store/editorStore";
-import { BREAKPOINTS, resolveColor, resolveFrame, resolveHidden, shadowCss } from "../types/page";
+import {
+  BREAKPOINTS,
+  documentFontFamily,
+  resolveColor,
+  resolveFrame,
+  resolveHidden,
+  shadowCss,
+} from "../types/page";
 import type { BreakpointId, PageDocument } from "../types/page";
 
 /**
@@ -42,6 +49,7 @@ function renderNode(
         background,
         borderRadius: node.borderRadius,
         boxShadow,
+        fontFamily: documentFontFamily(doc.meta.tokens),
       }
     : {
         position: "absolute",

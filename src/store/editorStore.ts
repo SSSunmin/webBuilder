@@ -108,6 +108,19 @@ interface EditorState {
   /** Remove a color token. Nodes still referencing it render without that color
    * (the ref dangles → resolves to undefined) until repointed. */
   removeColorToken: (key: string) => void;
+  /** Upsert a document-level font token (font-family stack). Invalid keys ignored.
+   * The `body` token becomes the page's base font (applied to the root). */
+  setFontToken: (key: string, value: string) => void;
+  /** Remove a font token. */
+  removeFontToken: (key: string) => void;
+  /** Upsert a document-level spacing token (px). Invalid keys are ignored. */
+  setSpacingToken: (key: string, value: number) => void;
+  /** Remove a spacing token. Nodes whose padding/margin reference it fall back
+   * to zero (dangling ref) until repointed. */
+  removeSpacingToken: (key: string) => void;
+  /** Set a node's padding/margin to an explicit Sides or a `token:<key>`
+   * spacing reference (switches between custom and token in the inspector). */
+  setNodeSpacingValue: (id: string, which: "padding" | "margin", value: Sides | string) => void;
   /** Merge a partial pixel shadow into the node (creates a default if none). */
   updateNodeShadow: (id: string, partial: Partial<ShadowSpec>) => void;
   /** Remove a node's shadow entirely. */
@@ -480,6 +493,53 @@ export const useEditorStore = create<EditorState>((set, get) => {
         return { ...d, meta: { ...d.meta, tokens: { ...d.meta.tokens, colors } } };
       }, null),
 
+    setFontToken: (key, value) => {
+      if (!isValidTokenKey(key)) return;
+      apply(
+        (d) => ({
+          ...d,
+          meta: {
+            ...d.meta,
+            tokens: { ...d.meta.tokens, fonts: { ...d.meta.tokens?.fonts, [key]: value } },
+          },
+        }),
+        `token:font:${key}`,
+      );
+    },
+
+    removeFontToken: (key) =>
+      apply((d) => {
+        const fonts = { ...d.meta.tokens?.fonts };
+        if (!(key in fonts)) return d;
+        delete fonts[key];
+        return { ...d, meta: { ...d.meta, tokens: { ...d.meta.tokens, fonts } } };
+      }, null),
+
+    setSpacingToken: (key, value) => {
+      if (!isValidTokenKey(key)) return;
+      apply(
+        (d) => ({
+          ...d,
+          meta: {
+            ...d.meta,
+            tokens: { ...d.meta.tokens, spacing: { ...d.meta.tokens?.spacing, [key]: value } },
+          },
+        }),
+        `token:spacing:${key}`,
+      );
+    },
+
+    removeSpacingToken: (key) =>
+      apply((d) => {
+        const spacing = { ...d.meta.tokens?.spacing };
+        if (!(key in spacing)) return d;
+        delete spacing[key];
+        return { ...d, meta: { ...d.meta, tokens: { ...d.meta.tokens, spacing } } };
+      }, null),
+
+    setNodeSpacingValue: (id, which, value) =>
+      patchNode(id, (node) => ({ ...node, [which]: value }), null),
+
     setNodeRadius: (id, borderRadius) =>
       patchNode(
         id,
@@ -508,15 +568,18 @@ export const useEditorStore = create<EditorState>((set, get) => {
         ]
           .filter(Boolean)
           .join("|");
+      const tokens = get().document?.meta.tokens;
       patchNode(
         id,
         (node) => {
+          // Editing a side resolves any token ref to numbers first, so the node
+          // switches from a uniform token to explicit per-side custom values.
           const next = { ...node };
           if (partial.padding) {
-            next.padding = { ...toSides(node.padding), ...partial.padding };
+            next.padding = { ...toSides(node.padding, tokens), ...partial.padding };
           }
           if (partial.margin) {
-            next.margin = { ...toSides(node.margin), ...partial.margin };
+            next.margin = { ...toSides(node.margin, tokens), ...partial.margin };
           }
           return next;
         },
@@ -563,8 +626,9 @@ export const useEditorStore = create<EditorState>((set, get) => {
           children: n.children.filter((c) => idMap.has(c)).map((c) => idMap.get(c)!),
           frame: { ...n.frame },
           props: { ...n.props },
-          ...(n.padding ? { padding: { ...n.padding } } : {}),
-          ...(n.margin ? { margin: { ...n.margin } } : {}),
+          // padding/margin may be a token-ref string — copy it as-is, only clone Sides.
+          ...(n.padding ? { padding: typeof n.padding === "string" ? n.padding : { ...n.padding } } : {}),
+          ...(n.margin ? { margin: typeof n.margin === "string" ? n.margin : { ...n.margin } } : {}),
           ...(n.boxShadow ? { boxShadow: { ...n.boxShadow } } : {}),
           ...(n.overrides ? { overrides: cloneOverrides(n.overrides) } : {}),
           ...(n.events
@@ -753,7 +817,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       // content box (children snap to that area). The other axis keeps
       // inheriting (sparse override).
       const pf = resolveFrame(doc.nodes[pc.parentId], bp);
-      const pad = toSides(doc.nodes[pc.parentId].padding);
+      const pad = toSides(doc.nodes[pc.parentId].padding, doc.meta.tokens);
       const next: Record<string, Partial<NodeFrame>> = {};
       for (const cid of pc.childIds) {
         const cf = resolveFrame(doc.nodes[cid], bp);

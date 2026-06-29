@@ -4,9 +4,11 @@ import {
   BREAKPOINTS,
   colorTokenKey,
   isColorTokenRef,
+  isSpacingTokenRef,
   resolveColor,
   resolveFrame,
   resolveHidden,
+  spacingTokenKey,
   toSides,
 } from "../types/page";
 import { describeEvent } from "../types/events";
@@ -72,6 +74,20 @@ function spacingSummary(sides: Sides): string | null {
   return `${top}/${right}/${bottom}/${left}`;
 }
 
+/** Describe a padding/margin value: a token reference with its resolved px (or
+ * "미정의" when deleted), or the compact literal notation (null when all zero). */
+function spacingField(
+  value: Sides | string | undefined,
+  tokens: DocumentTokens | undefined,
+): string | null {
+  if (isSpacingTokenRef(value)) {
+    const key = spacingTokenKey(value);
+    const px = tokens?.spacing?.[key];
+    return `token ${key} (${typeof px === "number" ? `${px}px` : "미정의"})`;
+  }
+  return spacingSummary(toSides(value, tokens));
+}
+
 /** Describe a background: a literal color, or a token reference with its
  * resolved value (or "미정의" when the token no longer exists). */
 function bgSummary(bg: string, tokens: DocumentTokens | undefined): string {
@@ -91,9 +107,9 @@ function frameSummary(node: PageNode, isRoot: boolean, tokens: DocumentTokens | 
     const pct = Math.round(Math.max(0, Math.min(1, sh.opacity)) * 100); // match shadowCss clamp
     parts.push(`shadow ${sh.x}/${sh.y}/${sh.blur}/${sh.spread} ${sh.color} ${pct}%`);
   }
-  const pad = spacingSummary(toSides(node.padding));
+  const pad = spacingField(node.padding, tokens);
   if (pad !== null) parts.push(`pad ${pad}`);
-  const margin = spacingSummary(toSides(node.margin));
+  const margin = spacingField(node.margin, tokens);
   if (margin !== null) parts.push(`margin ${margin}`);
   return parts.join(", ");
 }
@@ -126,15 +142,22 @@ function renderNode(
   return lines;
 }
 
-/** A "디자인 토큰" section listing defined color tokens, or "" when none. */
+/** "디자인 토큰" sections for the defined color/font/spacing tokens, or "" when
+ * none. Each key AND value is wrapped in a code span so markdown metacharacters
+ * in a user-supplied token can't inject links/formatting into the spec. */
 function tokensSection(tokens: DocumentTokens | undefined): string {
-  const colors = tokens?.colors;
-  const entries = colors ? Object.entries(colors) : [];
-  if (!entries.length) return "";
-  // Wrap the value in a code span too so markdown metacharacters in a
-  // user-supplied color can't inject links/formatting into the spec.
-  const lines = entries.map(([k, v]) => `- \`${k}\`: \`${v}\``);
-  return `\n## 디자인 토큰 (색상)\n\n${lines.join("\n")}\n`;
+  const block = (title: string, entries: [string, string][]): string =>
+    entries.length
+      ? `## 디자인 토큰 (${title})\n\n${entries
+          .map(([k, v]) => `- \`${k}\`: \`${v}\``)
+          .join("\n")}`
+      : "";
+  const blocks = [
+    block("색상", Object.entries(tokens?.colors ?? {})),
+    block("글꼴", Object.entries(tokens?.fonts ?? {})),
+    block("간격", Object.entries(tokens?.spacing ?? {}).map(([k, v]) => [k, `${v}px`])),
+  ].filter(Boolean);
+  return blocks.length ? `\n${blocks.join("\n\n")}\n` : "";
 }
 
 /** Human/AI-readable markdown spec of the page (tree + position/size + props). */

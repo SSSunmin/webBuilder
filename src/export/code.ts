@@ -4,9 +4,15 @@ import {
   BREAKPOINTS,
   colorTokenKey,
   colorTokenVar,
+  fontTokenVar,
   isColorTokenRef,
+  isSpacingTokenRef,
   sanitizeColor,
+  sanitizeFontFamily,
+  sanitizeSpacing,
   shadowCss,
+  spacingTokenKey,
+  spacingTokenVar,
   toSides,
 } from "../types/page";
 import { TRIGGER_PROP, actionBody, actionNeedsEvent, safeComment } from "../types/events";
@@ -31,6 +37,27 @@ function cssSpacing(sides: Sides): string | null {
   if (top === 0 && right === 0 && bottom === 0 && left === 0) return null;
   if (top === right && right === bottom && bottom === left) return `${top}px`;
   return `${top}px ${right}px ${bottom}px ${left}px`;
+}
+
+/**
+ * A padding/margin CSS declaration. A spacing-token ref becomes `var(--space-…)`
+ * backed by the :root block — but only when the token still exists and resolves
+ * to a safe number; a dangling/invalid ref drops the spacing (matches toSides
+ * + rootTokenBlock). A literal Sides becomes a px value/shorthand.
+ */
+function spacingDecl(
+  prop: "padding" | "margin",
+  value: Sides | string | undefined,
+  tokens: DocumentTokens | undefined,
+): string | null {
+  if (isSpacingTokenRef(value)) {
+    const key = spacingTokenKey(value);
+    return sanitizeSpacing(tokens?.spacing?.[key]) !== null
+      ? `${prop}: var(${spacingTokenVar(key)})`
+      : null;
+  }
+  const css = cssSpacing(toSides(value, tokens));
+  return css ? `${prop}: ${css}` : null;
 }
 
 /** Base (desktop) CSS declarations for a node's frame + box styling. */
@@ -62,12 +89,17 @@ function baseDecls(node: PageNode, isRoot: boolean, tokens: DocumentTokens | und
   if (typeof node.borderRadius === "number") parts.push(`border-radius: ${node.borderRadius}px`);
   const shadow = shadowCss(node.boxShadow);
   if (shadow) parts.push(`box-shadow: ${shadow}`);
-  const padding = cssSpacing(toSides(node.padding));
-  if (padding) parts.push(`padding: ${padding}`);
+  const padding = spacingDecl("padding", node.padding, tokens);
+  if (padding) parts.push(padding);
   // Root keeps its "0 auto" centering margin; user margin applies elsewhere.
   if (!isRoot) {
-    const margin = cssSpacing(toSides(node.margin));
-    if (margin) parts.push(`margin: ${margin}`);
+    const margin = spacingDecl("margin", node.margin, tokens);
+    if (margin) parts.push(margin);
+  }
+  // The page root applies the document's base font (the `body` font token) so
+  // every node inherits it; emitted as a custom property backed by :root.
+  if (isRoot && sanitizeFontFamily(tokens?.fonts?.body)) {
+    parts.push(`font-family: var(${fontTokenVar("body")})`);
   }
   return parts;
 }
@@ -115,17 +147,25 @@ function pushRules(
   if (m.length) acc.mobile.push(`.${cls} { ${m.join("; ")}; }`);
 }
 
-/** A `:root` block declaring every defined color token as a custom property,
- * or null when there are none. Nodes reference these via `var(--color-<key>)`.
- * Unsafe values are dropped (same trust boundary as baseDecls) so a token like
- * `red; } body { ... ` can't break out of the block. */
+/** A `:root` block declaring every defined token as a custom property
+ * (`--color-*`, `--space-*`, `--font-*`), or null when there are none. Nodes
+ * reference colors/spacing via var(); fonts apply at the root. Unsafe values are
+ * dropped (same trust boundary as baseDecls) so a token like `red; } body { ... `
+ * can't break out of the block. */
 function rootTokenBlock(tokens: DocumentTokens | undefined): string | null {
-  const colors = tokens?.colors;
-  if (!colors) return null;
-  const decls = Object.entries(colors)
-    .map(([k, v]) => [k, sanitizeColor(v)] as const)
-    .filter(([, v]) => v !== null)
-    .map(([k, v]) => `${colorTokenVar(k)}: ${v};`);
+  const decls: string[] = [];
+  for (const [k, v] of Object.entries(tokens?.colors ?? {})) {
+    const c = sanitizeColor(v);
+    if (c !== null) decls.push(`${colorTokenVar(k)}: ${c};`);
+  }
+  for (const [k, v] of Object.entries(tokens?.spacing ?? {})) {
+    const n = sanitizeSpacing(v);
+    if (n !== null) decls.push(`${spacingTokenVar(k)}: ${n}px;`);
+  }
+  for (const [k, v] of Object.entries(tokens?.fonts ?? {})) {
+    const f = sanitizeFontFamily(v);
+    if (f !== null) decls.push(`${fontTokenVar(k)}: ${f};`);
+  }
   if (!decls.length) return null;
   return `:root {\n${indentBlock(decls.join("\n"), 2)}\n}`;
 }

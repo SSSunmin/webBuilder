@@ -4,13 +4,20 @@ import {
   ZERO_SIDES,
   colorTokenKey,
   colorTokenVar,
+  documentFontFamily,
   isColorTokenRef,
+  isSpacingTokenRef,
   isValidTokenKey,
   makeColorTokenRef,
+  makeSpacingTokenRef,
   resolveColor,
   resolveFrame,
   resolveHidden,
+  resolveSpacing,
+  sanitizeFontFamily,
+  sanitizeSpacing,
   shadowCss,
+  spacingTokenVar,
   toSides,
 } from "./page";
 import type { PageNode } from "./page";
@@ -76,6 +83,71 @@ describe("color tokens", () => {
   it("resolves a dangling ref (deleted token) to undefined", () => {
     expect(resolveColor(makeColorTokenRef("gone"), { colors: {} })).toBeUndefined();
     expect(resolveColor(makeColorTokenRef("brand"), undefined)).toBeUndefined();
+  });
+});
+
+describe("spacing tokens", () => {
+  it("round-trips a ref through make/is/key/var", () => {
+    const ref = makeSpacingTokenRef("md");
+    expect(ref).toBe("token:md");
+    expect(isSpacingTokenRef(ref)).toBe(true);
+    expect(isSpacingTokenRef({ top: 0, right: 0, bottom: 0, left: 0 })).toBe(false);
+    expect(isSpacingTokenRef(undefined)).toBe(false);
+    expect(spacingTokenVar("md")).toBe("--space-md");
+  });
+
+  it("resolves a ref to its px value; non-refs and dangling refs to undefined", () => {
+    const tokens = { spacing: { md: 16 } };
+    expect(resolveSpacing(makeSpacingTokenRef("md"), tokens)).toBe(16);
+    expect(resolveSpacing(makeSpacingTokenRef("gone"), tokens)).toBeUndefined();
+    expect(resolveSpacing({ top: 8, right: 8, bottom: 8, left: 8 }, tokens)).toBeUndefined();
+    expect(resolveSpacing(makeSpacingTokenRef("md"), undefined)).toBeUndefined();
+  });
+
+  it("toSides expands a token ref uniformly, dangling → zero", () => {
+    const tokens = { spacing: { md: 16 } };
+    expect(toSides(makeSpacingTokenRef("md"), tokens)).toEqual({
+      top: 16,
+      right: 16,
+      bottom: 16,
+      left: 16,
+    });
+    expect(toSides(makeSpacingTokenRef("gone"), tokens)).toEqual(ZERO_SIDES);
+    expect(toSides(makeSpacingTokenRef("md"))).toEqual(ZERO_SIDES); // no tokens passed
+  });
+});
+
+describe("font tokens", () => {
+  it("documentFontFamily returns the sanitized body font, or undefined", () => {
+    expect(documentFontFamily({ fonts: { body: "Pretendard, sans-serif" } })).toBe(
+      "Pretendard, sans-serif",
+    );
+    expect(documentFontFamily({ fonts: {} })).toBeUndefined();
+    expect(documentFontFamily(undefined)).toBeUndefined();
+    // An unsafe body value is dropped, not applied.
+    expect(documentFontFamily({ fonts: { body: "x; } body { display:none" } })).toBeUndefined();
+  });
+});
+
+describe("token sanitizers (A03 trust boundary)", () => {
+  it("sanitizeFontFamily allows font stacks, rejects CSS-breakout chars", () => {
+    expect(sanitizeFontFamily('Pretendard, "Helvetica Neue", sans-serif')).toBe(
+      'Pretendard, "Helvetica Neue", sans-serif',
+    );
+    expect(sanitizeFontFamily("Inter")).toBe("Inter");
+    expect(sanitizeFontFamily("red; } body { color: red")).toBeNull();
+    expect(sanitizeFontFamily("url(evil)")).toBeNull();
+    expect(sanitizeFontFamily("")).toBeNull();
+    expect(sanitizeFontFamily(undefined)).toBeNull();
+  });
+
+  it("sanitizeSpacing coerces to a non-negative integer, else null", () => {
+    expect(sanitizeSpacing(16)).toBe(16);
+    expect(sanitizeSpacing(7.6)).toBe(8);
+    expect(sanitizeSpacing(-4)).toBe(0);
+    expect(sanitizeSpacing(Number.NaN)).toBeNull();
+    expect(sanitizeSpacing(undefined)).toBeNull();
+    expect(sanitizeSpacing("16" as never)).toBeNull();
   });
 });
 

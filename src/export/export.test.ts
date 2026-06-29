@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useEditorStore } from "../store/editorStore";
-import { makeColorTokenRef } from "../types/page";
+import { makeColorTokenRef, makeSpacingTokenRef } from "../types/page";
 import { generateSpec } from "./spec";
 import { generateCode } from "./code";
 
@@ -548,5 +548,100 @@ describe("color token export", () => {
     useEditorStore.getState().setNodeBackground(child, "#fff; } * { color: red");
     const code = generateCode(useEditorStore.getState().document!);
     expect(code).not.toContain("* { color: red"); // injection neutralized
+  });
+});
+
+describe("font token export", () => {
+  it("emits a :root --font var and applies the body font on the page root", () => {
+    const store = useEditorStore.getState();
+    store.newDocument("Fonts");
+    useEditorStore.getState().setFontToken("body", "Pretendard, sans-serif");
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain("--font-body: Pretendard, sans-serif;");
+    expect(code).toContain("font-family: var(--font-body)"); // root applies it
+    expect(generateSpec(useEditorStore.getState().document!)).toContain("## 디자인 토큰 (글꼴)");
+  });
+
+  it("emits the var for a non-body font token but does not auto-apply it", () => {
+    const store = useEditorStore.getState();
+    store.newDocument("Fonts");
+    useEditorStore.getState().setFontToken("heading", "Georgia, serif");
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain("--font-heading: Georgia, serif;");
+    expect(code).not.toContain("font-family: var(--font-heading)");
+  });
+
+  it("drops a font value that would break out of the stylesheet (CSS injection)", () => {
+    const store = useEditorStore.getState();
+    store.newDocument("FontInject");
+    useEditorStore.getState().setFontToken("body", "x; } body { display: none");
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).not.toContain("display: none"); // value never reaches the CSS
+    expect(code).not.toContain("font-family: var(--font-body)"); // unsafe → not applied
+  });
+});
+
+describe("spacing token export", () => {
+  /** Document with one Card whose padding references a `gap` spacing token. */
+  function tokenDoc() {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Spacing");
+    const child = useEditorStore.getState().addNode(doc.rootId, "Card")!;
+    useEditorStore.getState().setSpacingToken("gap", 24);
+    useEditorStore.getState().setNodeSpacingValue(child, "padding", makeSpacingTokenRef("gap"));
+    return { document: useEditorStore.getState().document!, child };
+  }
+
+  it("emits a :root --space var and a padding var() reference", () => {
+    const { document } = tokenDoc();
+    const code = generateCode(document);
+    expect(code).toContain("--space-gap: 24px;");
+    expect(code).toContain("padding: var(--space-gap)");
+  });
+
+  it("changing the token value flows to every reference", () => {
+    tokenDoc();
+    useEditorStore.getState().setSpacingToken("gap", 40);
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain("--space-gap: 40px;");
+    expect(code).toContain("padding: var(--space-gap)"); // ref unchanged
+  });
+
+  it("a dangling ref (deleted token) drops the padding, not the node", () => {
+    const { document, child } = tokenDoc();
+    expect(generateCode(document)).toContain("padding: var(--space-gap)");
+    useEditorStore.getState().removeSpacingToken("gap");
+    const d = useEditorStore.getState().document!;
+    const code = generateCode(d);
+    expect(code).not.toContain("--space-gap"); // no token left
+    expect(code).not.toContain("var(--space-gap)"); // ref no longer emitted
+    expect(d.nodes[child]).toBeDefined(); // node survives
+  });
+
+  it("lists spacing tokens (with px) and a token padding in the spec", () => {
+    const { document } = tokenDoc();
+    const spec = generateSpec(document);
+    expect(spec).toContain("## 디자인 토큰 (간격)");
+    expect(spec).toContain("`gap`: `24px`");
+    expect(spec).toContain("pad token gap (24px)");
+  });
+
+  it("drops a spacing token whose value is non-finite (defensive coercion)", () => {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("BadSpace");
+    const child = useEditorStore.getState().addNode(doc.rootId, "Card")!;
+    // Corrupt the token value (as external JSON could) to a non-number.
+    const d = useEditorStore.getState().document!;
+    const corrupt = {
+      ...d,
+      meta: { ...d.meta, tokens: { spacing: { gap: "100px; } * {" as never } } },
+      nodes: {
+        ...d.nodes,
+        [child]: { ...d.nodes[child], padding: makeSpacingTokenRef("gap") },
+      },
+    };
+    const code = generateCode(corrupt);
+    expect(code).not.toContain("* {"); // unsafe value never reaches the CSS
+    expect(code).not.toContain("var(--space-gap)"); // dangling/unsafe → dropped
   });
 });
