@@ -103,6 +103,15 @@ export interface NodeOverride {
   hidden?: boolean;
 }
 
+/** How a container arranges its children. Absent/"absolute" (the default and the
+ * shape of every pre-flex document) positions children by their frame.x/y.
+ * "flex" lays children out in normal flow (CSS flexbox); their x/y are ignored. */
+export type LayoutMode = "absolute" | "flex";
+/** Flex cross-axis alignment of children. */
+export type FlowAlign = "start" | "center" | "end" | "stretch";
+/** Flex main-axis distribution of children. */
+export type FlowJustify = "start" | "center" | "end" | "between";
+
 export interface PageNode {
   id: string;
   type: string;
@@ -123,6 +132,17 @@ export interface PageNode {
   /** Outer margin — explicit per-side values, or a `token:<key>` spacing-token
    * reference applied uniformly. Siblings keep this gap when snapping. */
   margin?: Sides | string;
+  /** Container layout mode for this node's children. Absent = "absolute"
+   * (children placed by frame.x/y). "flex" flows children (see resolveFlow). */
+  layout?: LayoutMode;
+  /** Flex main-axis direction (layout="flex" only). Default "row". */
+  flexDirection?: "row" | "column";
+  /** Gap between flex children, px (layout="flex" only). Default 0. */
+  gap?: number;
+  /** Flex cross-axis alignment (layout="flex" only). Default "start". */
+  alignItems?: FlowAlign;
+  /** Flex main-axis distribution (layout="flex" only). Default "start". */
+  justifyContent?: FlowJustify;
   /** Per-breakpoint overrides; desktop is the base frame (no override). */
   overrides?: Partial<Record<Exclude<BreakpointId, "desktop">, NodeOverride>>;
   /** Interaction bindings (trigger → action), emitted to the spec and code. */
@@ -290,6 +310,47 @@ export function fontTokenVar(key: string): string {
  * undefined — applied to the page root so all text inherits it. */
 export function documentFontFamily(tokens: DocumentTokens | undefined): string | undefined {
   return sanitizeFontFamily(tokens?.fonts?.body) ?? undefined;
+}
+
+// --- Layout (flex flow) ---
+// A container with layout="flex" arranges its children in normal flow instead of
+// by absolute frame.x/y. resolveFlow maps the node's enum fields to CSS-ready
+// values so the canvas (React style) and code export (stylesheet) stay identical.
+
+const ALIGN_CSS: Record<FlowAlign, string> = {
+  start: "flex-start",
+  center: "center",
+  end: "flex-end",
+  stretch: "stretch",
+};
+const JUSTIFY_CSS: Record<FlowJustify, string> = {
+  start: "flex-start",
+  center: "center",
+  end: "flex-end",
+  between: "space-between",
+};
+
+/** CSS-ready flex layout for a container, or null when it isn't in flex mode (so
+ * the caller keeps absolute positioning). Children wrap (so narrowing the
+ * container reflows them); `gap` is sanitized to a safe px number, and the enum
+ * fields map to fixed CSS keywords — an unknown value falls back, never injects. */
+export interface ResolvedFlow {
+  flexDirection: "row" | "column";
+  flexWrap: "wrap";
+  gap: number;
+  alignItems: string;
+  justifyContent: string;
+}
+
+export function resolveFlow(node: PageNode): ResolvedFlow | null {
+  if (node.layout !== "flex") return null;
+  return {
+    flexDirection: node.flexDirection === "column" ? "column" : "row",
+    flexWrap: "wrap",
+    gap: sanitizeSpacing(node.gap) ?? 0,
+    alignItems: ALIGN_CSS[node.alignItems as FlowAlign] ?? "flex-start",
+    justifyContent: JUSTIFY_CSS[node.justifyContent as FlowJustify] ?? "flex-start",
+  };
 }
 
 // --- Trust boundary (A03: CSS injection) ---

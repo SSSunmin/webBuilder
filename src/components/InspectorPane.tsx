@@ -18,7 +18,15 @@ import {
   spacingTokenKey,
   toSides,
 } from "../types/page";
-import type { DocumentTokens, NodeFrame, ShadowSpec, Sides } from "../types/page";
+import type {
+  DocumentTokens,
+  FlowAlign,
+  FlowJustify,
+  NodeFrame,
+  PageNode,
+  ShadowSpec,
+  Sides,
+} from "../types/page";
 import { ACTION_TYPES, EVENT_TRIGGERS } from "../types/events";
 import type { ActionType, EventBinding, EventTrigger } from "../types/events";
 
@@ -113,6 +121,113 @@ function SpacingControl({
 
 const inputCls =
   "h-9 w-full rounded-button border border-line px-2 text-sm focus:border-brand focus:outline-none";
+
+const FLEX_DIRS: { value: "row" | "column"; label: string }[] = [
+  { value: "row", label: "가로" },
+  { value: "column", label: "세로" },
+];
+const FLEX_JUSTIFY: { value: FlowJustify; label: string }[] = [
+  { value: "start", label: "시작" },
+  { value: "center", label: "가운데" },
+  { value: "end", label: "끝" },
+  { value: "between", label: "양끝(공백 분배)" },
+];
+const FLEX_ALIGN: { value: FlowAlign; label: string }[] = [
+  { value: "start", label: "시작" },
+  { value: "center", label: "가운데" },
+  { value: "end", label: "끝" },
+  { value: "stretch", label: "늘이기" },
+];
+
+/** Container child-layout control: 자유 배치(absolute, frame 좌표) ↔ Flex(자동 흐름).
+ * When flex, exposes direction/gap/주축·교차축 정렬. Flex children flow and wrap,
+ * so reorder them from the layer tree (canvas drag is disabled in flow). */
+function LayoutControl({
+  node,
+  onChange,
+}: {
+  node: PageNode;
+  onChange: (
+    partial: Partial<
+      Pick<PageNode, "layout" | "flexDirection" | "gap" | "alignItems" | "justifyContent">
+    >,
+  ) => void;
+}) {
+  const flex = node.layout === "flex";
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium text-muted">자식 배치</span>
+        <select
+          className={inputCls}
+          value={flex ? "flex" : "absolute"}
+          onChange={(e) => onChange({ layout: e.target.value === "flex" ? "flex" : "absolute" })}
+        >
+          <option value="absolute">자유 배치 (좌표)</option>
+          <option value="flex">Flex (자동 흐름)</option>
+        </select>
+      </label>
+      {flex && (
+        <div className="flex flex-col gap-2 rounded-button border border-line2 p-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted">방향</span>
+            <select
+              className={inputCls}
+              value={node.flexDirection === "column" ? "column" : "row"}
+              onChange={(e) =>
+                onChange({ flexDirection: e.target.value === "column" ? "column" : "row" })
+              }
+            >
+              {FLEX_DIRS.map((d) => (
+                <option key={d.value} value={d.value}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted">간격 (gap, px)</span>
+            <input
+              type="number"
+              min={0}
+              className={inputCls}
+              value={Math.max(0, Math.round(node.gap ?? 0))}
+              onChange={(e) => onChange({ gap: e.target.value === "" ? 0 : Number(e.target.value) })}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted">주축 정렬</span>
+            <select
+              className={inputCls}
+              value={node.justifyContent ?? "start"}
+              onChange={(e) => onChange({ justifyContent: e.target.value as FlowJustify })}
+            >
+              {FLEX_JUSTIFY.map((j) => (
+                <option key={j.value} value={j.value}>
+                  {j.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted">교차축 정렬</span>
+            <select
+              className={inputCls}
+              value={node.alignItems ?? "start"}
+              onChange={(e) => onChange({ alignItems: e.target.value as FlowAlign })}
+            >
+              {FLEX_ALIGN.map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Visual grid picker for a component's icon prop ("" = no icon). */
 function IconPicker({
@@ -694,6 +809,7 @@ export function InspectorPane() {
   const updateNodeFrame = useEditorStore((s) => s.updateNodeFrame);
   const setNodeBackground = useEditorStore((s) => s.setNodeBackground);
   const setNodeRadius = useEditorStore((s) => s.setNodeRadius);
+  const setNodeLayout = useEditorStore((s) => s.setNodeLayout);
   const tokens = useEditorStore((s) => s.document?.meta.tokens);
   const setColorToken = useEditorStore((s) => s.setColorToken);
   const removeColorToken = useEditorStore((s) => s.removeColorToken);
@@ -852,6 +968,12 @@ export function InspectorPane() {
                   </>
                 )}
               </div>
+              {def.isContainer && (
+                <LayoutControl
+                  node={node}
+                  onChange={(partial) => setNodeLayout(selectedId, partial)}
+                />
+              )}
               {def.isContainer && (
                 <SpacingControl
                   label="패딩"

@@ -11,9 +11,12 @@ export interface Box {
   h: number;
 }
 
-/** A box that may carry an outer margin (keeps a gap when others snap to it). */
+/** A box that may carry an outer margin (keeps a gap when others snap to it).
+ * A `token:<key>` spacing ref is accepted (matches PageNode.margin) and resolves
+ * to zero here — snap geometry has no document tokens, so a token margin simply
+ * contributes no gap. */
 export interface SnapBox extends Box {
-  margin?: Sides | number;
+  margin?: Sides | number | string;
 }
 
 /** Inner snap rectangle (e.g. a container's padded area). */

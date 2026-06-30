@@ -26,6 +26,11 @@ export function generateThumbnail(doc: PageDocument): string {
       const child = doc.nodes[cid];
       if (!child || seen.has(cid)) continue; // skip missing refs / cycles
       seen.add(cid);
+      // ponytail: children of a flex container (node.layout === "flex") are laid
+      // out by flow, so their frame.x/y is stale — the thumbnail draws them at
+      // those coords, an approximation. Acceptable for a tiny home-card preview;
+      // upgrade path = replicate the flex flow here (or render off-DOM) if it
+      // ever reads as clearly wrong.
       const x = ox + child.frame.x;
       const y = oy + child.frame.y;
       rects.push(rectFor(child, x, y, false, tokens));

@@ -6,6 +6,7 @@ import {
   isColorTokenRef,
   isSpacingTokenRef,
   resolveColor,
+  resolveFlow,
   resolveFrame,
   resolveHidden,
   spacingTokenKey,
@@ -96,11 +97,32 @@ function bgSummary(bg: string, tokens: DocumentTokens | undefined): string {
   return `bg token ${colorTokenKey(bg)} (${resolved ?? "미정의"})`;
 }
 
-function frameSummary(node: PageNode, isRoot: boolean, tokens: DocumentTokens | undefined): string {
+/** Describe a flex container's layout, e.g. "flex 가로, gap 8, 가운데", or null
+ * when the node isn't a flex container. */
+function flowSummary(node: PageNode): string | null {
+  const flow = resolveFlow(node);
+  if (!flow) return null;
+  const parts = [`flex ${flow.flexDirection === "column" ? "세로" : "가로"}`];
+  if (flow.gap) parts.push(`gap ${flow.gap}`);
+  if (flow.justifyContent !== "flex-start") parts.push(`정렬 ${flow.justifyContent}`);
+  if (flow.alignItems !== "flex-start") parts.push(`교차 ${flow.alignItems}`);
+  return parts.join(", ");
+}
+
+/** Position/size summary. A node whose parent flows (inFlow) has no meaningful
+ * x/y, so only its size is shown. */
+function frameSummary(
+  node: PageNode,
+  isRoot: boolean,
+  tokens: DocumentTokens | undefined,
+  inFlow: boolean,
+): string {
   const f = node.frame;
   const size = `${f.w}×${f.h}`;
-  const pos = isRoot ? size : `@(${f.x},${f.y}) ${size}`;
+  const pos = isRoot || inFlow ? size : `@(${f.x},${f.y}) ${size}`;
   const parts = [node.background ? `${pos}, ${bgSummary(node.background, tokens)}` : pos];
+  const flow = flowSummary(node);
+  if (flow) parts.push(flow);
   if (node.borderRadius) parts.push(`radius ${node.borderRadius}`);
   if (node.boxShadow) {
     const sh = node.boxShadow;
@@ -120,6 +142,7 @@ function renderNode(
   depth: number,
   isRoot: boolean,
   visited: Set<string> = new Set(),
+  inFlow = false,
 ): string[] {
   // Guard against corrupted documents with cyclic children references.
   if (visited.has(nodeId)) return [];
@@ -134,10 +157,13 @@ function renderNode(
     node,
     isRoot,
     doc.meta.tokens,
+    inFlow,
   )}${summary ? ` — ${summary}` : ""}`;
   const lines = [line, ...overrideLines(node, depth), ...eventLines(node, depth)];
+  // Children of a flex container flow, so they report size only (no x/y).
+  const childInFlow = Boolean(def?.isContainer && resolveFlow(node));
   for (const childId of node.children) {
-    lines.push(...renderNode(doc, childId, depth + 1, false, visited));
+    lines.push(...renderNode(doc, childId, depth + 1, false, visited, childInFlow));
   }
   return lines;
 }
