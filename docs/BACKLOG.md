@@ -12,7 +12,7 @@
 | 1 | 반응형 export 강건화 | 완료 (A·B1·B2) | frame/hidden 반응형(A) + per-bp padding/margin(B1)·background(B2) 오버라이드 |
 | 2 | 이벤트/액션 완성 | 완료 | submit·custom 액션을 실제 코드로 생성 |
 | 3 | 디자인 토큰/테마 | v2(색상·폰트·간격) 완료 | 문서 전역 색상·글꼴·간격 토큰 + 노드 참조 + export(:root/var) |
-| 4 | 레이아웃 모델(flex/grid) | Stage A 완료 · B 구현(수동 QA 대기) | flex 컨테이너(A). B=flex 자식 캔버스 드래그 순서변경(삽입선). grid·반응형 레이아웃은 C |
+| 4 | 레이아웃 모델(flex/grid) | A·C-1 완료 · B 구현(수동 QA 대기) | flex 컨테이너(A). B=flex 자식 캔버스 드래그 순서변경(삽입선). C-1=grid 컨테이너(완료). 반응형 레이아웃은 C-2+ |
 
 ---
 
@@ -273,7 +273,106 @@ reorder를 이미 담당. sortable은 별도 context/sensor 모델이라 기존 
 (R3 낮음) 드래그 피드백이 flex 레이아웃 흔들지 않게(opacity). (R4 확인) 중첩 flow reorder 1케이스 확인.
 되돌리기 어려운 변경·신규 의존성·마이그레이션 없음(전부 가역).
 
-**Stage C — 예정**: grid 템플릿 · per-breakpoint 레이아웃 오버라이드(#1 Stage B를 gap 오버라이드로 흡수).
+### Stage C-1 — grid 컨테이너 (기본 템플릿)  · 상태 완료 (2026-06-30, 브랜치 `task/4-grid-container`)
+
+**완료 (2026-06-30)** — 신규 의존성 0, flex 패턴 미러링:
+- 데이터 모델: `LayoutMode`에 `"grid"`, `PageNode.gridColumns?`/`gridRows?`(숫자 카운트). `resolveGrid(node)`가
+  열/행→`repeat(N, minmax(0,1fr))`(정수 강제), gap은 `sanitizeSpacing`, align/justify는 기존 `ALIGN_CSS`/
+  `JUSTIFY_CSS` 재사용. `ResolvedGrid.columns`로 카운트 노출(스펙이 재파싱 안 하게). **resolveFlow는 grid에
+  여전히 null** → `flowReorder`가 grid 자식에 flex reorder 미적용(불변 유지).
+- store: `setNodeLayout` Pick에 grid 필드 + 삭제조건 `!== "flex" && !== "grid"`(grid 보존 버그 수정).
+- 캔버스(`NodeView`): grid 래퍼(`display:grid`), grid 자식 relative(`flex:0 0 auto` 없음 — flex와 구분),
+  드래그 비활성(`disabled: isRoot || inGrid`). export(`code.ts`): `gridDecls` + `inGrid` 분기로 자식
+  relative emit(flex 전용 `flex:0 0 auto` 제외). spec(`spec.ts`): `gridSummary`("grid N열…") + 자식 x/y 생략.
+- 인스펙터(`LayoutControl`): "Grid (자동 배치)" 옵션 + 열/행 개수 입력, gap/정렬 재사용.
+- **A03**: 열/행은 정수 강제, gap·정렬은 sanitize/enum 매핑 → 인젝션 불가(인젝션 회귀 테스트로 증명).
+- 리뷰(code-reviewer): A03 airtight·resolveFlow-null 불변 확인. critical 1(grid 자식 `flex:0 0 auto` export
+  오염) + minor 1(gridSummary 정규식 재파싱) → 둘 다 해소.
+- 검증: vitest **305 통과**, `tsc -b` 0, `eslint .` 0 errors, `vite build` 성공. (grid 테스트: resolveGrid 5 +
+  store 3 + export/spec 5 = +13, +회귀.)
+
+**목표**: 컨테이너 `layout`에 `"grid"`를 추가해 자식을 grid 트랙(열/행)에 자동 배치. flex와 동일한
+"단일 출처 resolve 함수 + 캔버스/export 공유" 패턴. **전 문서 100% 하위호환**(additive·마이그레이션 없음).
+
+**현황(코드 근거)**: `layout?: "absolute"|"flex"`(`page.ts`)뿐. `resolveFlow(node)`가 enum→CSS 매핑(gap은
+`sanitizeSpacing`)이고 캔버스(`NodeView`)·`code.ts`·`spec.ts`·`flowReorder.ts`가 **모두 `resolveFlow` 공유**.
+flex 자식은 `.pg-N-c` flex 래퍼+자식 relative `flex:0 0 auto`. ⚠️ `setNodeLayout`은
+`if (next.layout !== "flex") delete next.layout` — **"grid"를 삭제해버리는 잠재 버그**(수정 필수).
+
+**범위 (In / Out)**
+- **In**: grid 컨테이너 타입 + 기본 템플릿(열 개수·행 개수·gap·정렬). 자식 자동 배치(grid auto-flow).
+  순서가 캔버스·미리보기·코드/스펙 export에 일관 반영. 인스펙터 `LayoutControl`에 grid 옵션.
+- **Out → 별도 항목**: 캔버스 2D 셀 드래그 배치/reorder, 셀 span/명시적 셀 좌표, 자유 템플릿 문자열
+  (`1fr 2fr 100px`), per-breakpoint 레이아웃 오버라이드, grid 자식 셀-stretch 정밀 배치, thumbnail 정밀
+  grid(flex와 동일하게 자식 absolute 근사 punt 유지).
+
+**핵심 설계 결정**
+- **D1 — 별도 `resolveGrid(node)` 신설(`resolveFlow` 확장 ❌)**: `flowReorder.resolveFlowDrag`가
+  `resolveFlow(parent)` 비-null이면 flex reorder를 적용 → resolveFlow가 grid에 비-null이면 **grid 자식이
+  flex 2D reorder를 잘못 받음**. resolveFlow는 flex 전용 유지, grid는 같은 *패턴*의 형제 함수로.
+- **D2 — 숫자 열/행 개수 모델(자유 문자열 ❌)**: `gridColumns/gridRows: number` → `repeat(N, minmax(0,1fr))`.
+  **A03이 구조적으로 0**(정수 강제, 문자열 보간 표면 없음). gap/정렬은 기존 `gap`·`alignItems`·
+  `justifyContent` + `sanitizeSpacing`·`ALIGN_CSS`·`JUSTIFY_CSS` 재사용(grid 컨테이너에서도 유효, 신규
+  매핑 0).
+- **D3 — grid 자식 캔버스 드래그 비활성**(2D 셀 reorder는 Out): 순서변경은 레이어트리. (flex는 Stage B에서
+  드래그 활성이지만 grid는 C-1에서 비활성 — 의도된 차이.)
+- **D4 — grid 자식 박스 = relative + 고정 frame 크기**(flex 자식과 동형, `flex:0 0 auto`는 grid에서 무시되어
+  무해). 셀-stretch 정밀 배치는 Out. `ponytail:` 주석으로 업그레이드 경로.
+
+**데이터 모델(`src/types/page.ts`)** — 전부 선택, 기존 문서 무변경:
+```ts
+export type LayoutMode = "absolute" | "flex" | "grid";  // "grid" 추가
+// PageNode grid 전용 신규 필드:
+gridColumns?: number;  // 열 개수 → repeat(N, minmax(0,1fr)). 없음=1
+gridRows?: number;     // 행 개수(선택) → grid-template-rows, 없으면 auto
+// gap / alignItems / justifyContent 는 flex와 공유(재사용)
+```
+신규 `ResolvedGrid` + `resolveGrid(node)`: `node.layout !== "grid"` → null. cols =
+`Math.max(1, sanitizeSpacing(gridColumns) ?? 1)`(0/음수/NaN→1), rows 동일(없으면 null). align/justify는
+기존 매핑 재사용 — flex와 같은 "enum→CSS 키워드, unknown은 fallback" 패턴.
+
+**resolveGrid(`page.ts`)**: `resolveFlow` 바로 옆에. gap은 `sanitizeSpacing`, 열/행은 정수 강제 후
+`repeat(N, minmax(0,1fr))` 문자열로만 조립(N은 정수라 인젝션 불가). 캔버스·export가 이 함수를 공유(단일 출처).
+
+**캔버스(`NodeView.tsx`)**: `resolveGrid` 분기로 grid 래퍼(`display:grid` + template/gap/정렬), 자식에
+`inGrid` 전달. grid 자식 `useDraggable disabled`(드래그 비활성), 박스는 relative+고정 크기(flex 자식과 동형).
+
+**store(`editorStore.ts`)**: `setNodeLayout` Pick에 `gridColumns|gridRows` 추가 + **삭제조건 수정**
+(`next.layout !== "flex" && next.layout !== "grid"`일 때만 `delete next.layout`). grid↔flex↔absolute 토글 시
+타 모드 옵션 보존(기존 동작 유지).
+
+**인스펙터(`InspectorPane.tsx`)**: `LayoutControl` 배치 select에 "Grid (자동 배치)" 옵션. grid일 때 열 개수·
+행 개수(선택) 입력 + gap/주축·교차축 정렬 재사용(방향은 flex만, 열/행은 grid만 노출).
+
+**export(`code.ts`·`spec.ts`)**: 코드는 `gridDecls(grid)` 신설 → `.pg-N-c` 래퍼에 `display:grid` +
+`grid-template-columns: repeat(N, minmax(0,1fr))`(+rows) + gap/align/justify, 자식 relative emit(flex와
+동형 분기). 스펙은 `gridSummary(node)`("grid N열, gap 8, …") + grid 자식 `@(x,y)` 생략(`childInFlow`에 grid
+포함). 신뢰경계(A03): 열/행은 정수, gap·정렬은 `sanitize`/enum 매핑 → 인젝션 불가.
+
+**완료 기준(Acceptance)**: 컨테이너를 grid로 설정하고 columns·gap을 주면 **캔버스·미리보기·export 코드가
+동일한 grid 레이아웃**을 만든다(`display:grid; grid-template-columns: repeat(N, minmax(0,1fr)); gap`).
+열/행/gap/정렬 값은 정수 강제·enum 매핑 화이트리스트만 통과하며, **기존 absolute/flex 문서 동작은 그대로**
+임이 특성화 테스트로 증명된다.
+
+**vitest 케이스(~14)**
+- resolver(`page.test.ts`): ①非grid→null ②cols/rows/gap/align/justify CSS 매핑(`repeat(N,minmax(0,1fr))`)
+  ③`gridColumns` 누락/0/음수→`repeat(1,…)` ④unknown align/justify enum→fallback(인젝션 없음)
+  ⑤**회귀**: `resolveFlow`는 grid에 여전히 null(flowReorder 안전 — grid 자식 flex reorder 미적용)
+- store(`editorStore.test.ts`): ⑥`setNodeLayout({layout:"grid",gridColumns:3})`→필드 보존
+  ⑦grid→absolute 토글 시 `layout` 삭제(grid 옵션은 보존) ⑧**회귀**: flex 토글 동작 불변
+- export code(`export.test.ts`): ⑨grid 컨테이너→`.pg-N-c`에 `display:grid; grid-template-columns:
+  repeat(N,minmax(0,1fr))` + gap ⑩grid 자식 relative(absolute 아님) ⑪**A03** 비정상 열/정렬→안전값(드롭)
+  ⑫**회귀** flex/absolute export 불변
+- export spec(`export.test.ts`): ⑬"grid N열…" 요약 + grid 자식 x/y 생략 ⑭**회귀** flex 요약 불변
+
+**영향 파일**: `src/types/page.ts` · `src/store/editorStore.ts` · `src/export/code.ts` · `src/export/spec.ts` ·
+`src/components/NodeView.tsx` · `src/components/InspectorPane.tsx` · 테스트 3종(`page.test.ts`·
+`editorStore.test.ts`·`export.test.ts`). thumbnail은 무변경(flex와 동일 punt).
+
+**위험·불확실**: (R1 중) `resolveFlow` 확장 시 flowReorder가 grid 자식에 flex reorder 오적용 → **별도
+`resolveGrid`로 회피**(케이스 ⑤로 고정). (R2 필수) `setNodeLayout` 삭제조건이 "grid"를 지움 → 수정 +
+케이스 ⑦. (R3 낮음) grid 자식 고정 크기(셀-stretch 미지원) — 의도된 단순화, 고급 배치는 Out. 되돌리기 어려운
+변경·신규 의존성·마이그레이션 없음(전부 가역·additive).
 
 ---
 
