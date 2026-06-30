@@ -9,7 +9,7 @@
 
 | # | 기능 | 상태 | 한 줄 |
 |---|------|------|-------|
-| 1 | 반응형 export 강건화 | Stage A 완료 | 코드 export가 `<style>`+`@media`로 frame/hidden 반응형 생성 (Stage B 연기) |
+| 1 | 반응형 export 강건화 | Stage A 완료 · B [대기] | frame/hidden 반응형 생성(A). B=per-bp padding/margin(B1)·background(B2) 오버라이드 |
 | 2 | 이벤트/액션 완성 | 완료 | submit·custom 액션을 실제 코드로 생성 |
 | 3 | 디자인 토큰/테마 | v2(색상·폰트·간격) 완료 | 문서 전역 색상·글꼴·간격 토큰 + 노드 참조 + export(:root/var) |
 | 4 | 레이아웃 모델(flex/grid) | Stage A 완료 | 절대위치 → flex 컨테이너(자동 흐름·reflow). grid·캔버스 flow 드래그는 Stage B/C |
@@ -32,13 +32,90 @@
 - 검증: `src/export/code.ts`, 테스트 `src/export/export.test.ts`(반응형 4 + 인젝션 1), 180 통과.
 - spec export는 이미 frame/hidden 오버라이드를 직렬화 중(변경 불필요).
 
-**Stage B — 연기**: per-breakpoint padding/margin/배경 등 *추가* 오버라이드. 데이터 모델+Inspector
-UI가 선행돼야 함(지금은 frame/hidden만 편집 가능). 깨끗한 단위로 분리하기 위해 분리.
-
-**근거 파일**: `src/store/*`(오버라이드 cascade), `src/export/code.ts`, `src/types/page.ts`.
+**근거 파일(Stage A)**: `src/store/*`(오버라이드 cascade), `src/export/code.ts`, `src/types/page.ts`.
 
 **완료 기준(Stage A)**: 노드에 태블릿 frame·모바일 hidden을 주고 export하면 코드에 해당 `@media`
 규칙이 생성된다(증거: 위 테스트 + 샘플 출력으로 확인 완료).
+
+---
+
+### Stage B — per-breakpoint 스타일 오버라이드 (padding·margin·background)  · 상태 [대기]
+
+**목표**: 노드별 태블릿/모바일 오버라이드를 `frame`/`hidden` 외에 **padding·margin·background**까지
+확장. Stage A의 `@media` 인프라 위에 얹는다. **전 문서 100% 하위호환**(additive, 마이그레이션 없음).
+
+**현황(코드 근거)**: `NodeOverride`(`page.ts`)는 `{ frame?, hidden? }`뿐. cascade는 `resolveFrame`/
+`resolveHidden`만 존재 — padding/margin/bg resolver 없음. export(`code.ts:overrideDecls`,
+`spec.ts:overrideLines`)·Inspector(bp 인지 편집)·`cloneOverrides`도 frame/hidden만 처리.
+
+**범위 (In / Out)**
+- **In**: `NodeOverride`에 `padding`·`margin`·`background` 추가, 데스크톱-퍼스트 cascade resolver
+  3종, 코드 export `@media` emit + A03 sanitize 재적용, 스펙 `overrideLines` 확장, 캔버스 bp 반영,
+  Inspector bp 인지(override-only 표시 + per-필드 "변경됨" 표식).
+- **Out → Stage C**: borderRadius·boxShadow 오버라이드, per-bp 레이아웃(flex gap/direction)
+  오버라이드, per-side 부분 병합, per-bp 토큰 *정의*, 반응형 폰트, `PreviewModal`의 bp 미리보기.
+
+**PR 분할 (확정)**
+- **B1 = 간격**(padding·margin): `Sides|string`·`spacingDecl`·`cloneOverrides` 깊은 복사·per-side seed.
+- **B2 = 배경**(background): `string`·`sanitizeColor`·토큰 참조. (B1 다음, 더 작음.)
+
+**데이터 모델(`src/types/page.ts`)** — 전부 선택, 기존 문서 무변경:
+```ts
+interface NodeOverride {
+  frame?: Partial<NodeFrame>;     // 기존 (축별 부분 병합)
+  hidden?: boolean;               // 기존
+  padding?: Sides | string;       // B1 — 완전한 Sides 또는 token:<key> (부분 아님)
+  margin?: Sides | string;        // B1
+  background?: string;            // B2 — 리터럴 색 또는 token:<key>
+}
+```
+> ⚠️ frame은 `Partial`(축별 병합)이지만 padding/margin/background는 **완전한 값을 통째 교체**한다.
+> Inspector에서 한 변만 편집해도 override엔 *resolved-at-bp로 seed한 완전한 Sides*를 쓴다.
+
+**cascade(resolver 신규, `page.ts`)**: `resolvePadding`/`resolveMargin`/`resolveBackground(node, bp)`.
+데스크톱-퍼스트 `base → tablet → mobile`로 `resolveFrame`과 **순서 동일·병합 방식 다름**(정의 시 통째
+치환, spread 병합 금지). 반환은 raw 값 → 호출부가 기존 `toSides(…,tokens)`/`resolveColor(…,tokens)`로
+마무리(dangling→드롭 일관).
+
+**export(`code.ts`·`spec.ts`)**: `overrideDecls`에 padding/margin/background 분기 추가 — **base와 동일
+헬퍼**(`spacingDecl`/`isColorTokenRef`+`sanitizeColor`) 재사용(raw 보간 금지). CSS cascade가 자동
+보장(태블릿 블록이 375px에도 적용 → mobile 미정의 시 상속). 신뢰경계(A03): 오버라이드 값도
+`sanitizeColor`/`sanitizeSpacing` 화이트리스트만 통과, dangling/unsafe는 `@media` 규칙에서 드롭.
+
+**store(`editorStore.ts`)**: `updateNodeSpacing`·`setNodeSpacingValue`·`setNodeBackground`를 bp 인지로
+확장(`activeBreakpoint`, `updateNodeFrame`/`writeFrame`과 동형; desktop 경로는 정확히 보존).
+`writeOverrideStyle` 헬퍼 신설, `cloneOverrides`에 padding(깊은)·margin·background 추가(**누락 시
+복제 누수**), `resetOverride`는 bp 전체 삭제라 신규 필드 자동 커버(무변경).
+
+**Inspector(`InspectorPane.tsx`)**: 기존 브레이크포인트 컨텍스트(`isCustomBp` 배너 + 초기화 버튼)
+재사용. `BackgroundControl`/`SpacingControl`이 이미 해당 액션을 호출 → 액션 bp 인지화로 UI 재구조화
+없이 동작. **표시 정책 = override-only + per-필드 "이 화면서 변경됨" 표식**(+ 필드별 ↺ 해제).
+
+**완료 기준(Acceptance)**: 노드에 **태블릿 padding·모바일 background 오버라이드**를 주고 export하면
+`@media(max-width:768px)`에 padding 규칙·`@media(max-width:375px)`에 background 규칙이 생성되고,
+토큰/리터럴 값은 `sanitize*` 화이트리스트만 통과하며, **기존 frame/hidden 동작은 그대로**임이
+특성화 테스트로 증명된다.
+
+**vitest 케이스(~19)**
+- resolver(`page.test.ts`): ①override 없음→base ②태블릿 override가 태블릿·모바일 적용(상속)
+  ③모바일이 모바일에서 승 ④**통째 교체**(병합 아님) ⑤`resolveBackground` cascade+토큰 보존
+  ⑥dangling→undefined
+- store(`editorStore.test.ts`): ⑦spacing@태블릿→`overrides.tablet.padding`(완전 Sides), base 불변
+  ⑧background@모바일→override, base 불변 ⑨desktop 편집→여전히 base(**회귀**)
+  ⑩`cloneOverrides`/`duplicateNode` 깊은 복사 ⑪`resetOverride`가 신규 필드 제거 ⑫bp 편집 undo
+- export code(`export.test.ts`): ⑬태블릿 padding→768 블록 ⑭모바일 background→375 블록
+  ⑮태블릿+모바일 블록 순서 ⑯override 토큰→`var()`, dangling 드롭 ⑰**A03** 인젝션 드롭
+  ⑱**회귀** frame/hidden emit 불변
+- export spec(`export.test.ts`): ⑲`overrideLines`에 태블릿 padding·background + frame/hidden 회귀
+
+**영향 파일**: `src/types/page.ts` · `src/store/editorStore.ts` · `src/export/code.ts` ·
+`src/export/spec.ts` · `src/components/NodeView.tsx` · `src/components/InspectorPane.tsx` ·
+테스트 3종(`page.test.ts`·`editorStore.test.ts`·`export.test.ts`).
+
+**위험·불확실**: (R2 높음) padding/margin/bg는 **통째 교체** — `resolveFrame` spread 패턴 복붙 시 버그.
+(R3 A03 필수) override 값은 base와 동일 sanitize 헬퍼 경유 — 인젝션 회귀 테스트 필수. (R4)
+`cloneOverrides` 신규 필드 누락=복제 누수. (R6 확인) `PreviewModal`의 bp 렌더 여부 — desktop 전용이면
+미리보기는 Out(착수 시 1줄 확인). 되돌리기 어려운 변경 없음(additive·마이그레이션 없음).
 
 ## 2. 이벤트/액션 완성
 
