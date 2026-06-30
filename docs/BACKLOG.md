@@ -12,7 +12,7 @@
 | 1 | 반응형 export 강건화 | Stage A 완료 · B [대기] | frame/hidden 반응형 생성(A). B=per-bp padding/margin(B1)·background(B2) 오버라이드 |
 | 2 | 이벤트/액션 완성 | 완료 | submit·custom 액션을 실제 코드로 생성 |
 | 3 | 디자인 토큰/테마 | v2(색상·폰트·간격) 완료 | 문서 전역 색상·글꼴·간격 토큰 + 노드 참조 + export(:root/var) |
-| 4 | 레이아웃 모델(flex/grid) | Stage A 완료 | 절대위치 → flex 컨테이너(자동 흐름·reflow). grid·캔버스 flow 드래그는 Stage B/C |
+| 4 | 레이아웃 모델(flex/grid) | Stage A 완료 · B [대기] | flex 컨테이너(A). B=flex 자식 캔버스 드래그 순서변경(삽입선). grid·반응형 레이아웃은 C |
 
 ---
 
@@ -183,8 +183,61 @@ export 코드도 동일하게 동작한다.
 - 부수: v2에서 누락됐던 `SnapBox.margin` 타입 갭(`Sides|string`) 보정.
 - 검증: typecheck·build 통과, 테스트 225개(`resolveFlow`·flex export·`setNodeLayout` +11).
 
-**Stage B/C — 예정**: 캔버스 flow 드래그(삽입선, `@dnd-kit/sortable` 검토) · grid 템플릿 ·
-per-breakpoint 레이아웃 오버라이드(#1 Stage B를 gap 오버라이드로 흡수).
+### Stage B — flex 자식 캔버스 드래그 순서변경  · 상태 [대기]
+
+**목표**: flow(flex) 자식을 캔버스에서 드래그해 순서를 바꾼다(삽입선 + 순서변경). 현재 flow 자식은
+드래그 비활성(순서변경은 레이어트리 ↑↓·DnD로만 가능).
+
+**현황(코드 근거)**: 캔버스 DnD는 `EditorShell`의 단일 `DndContext`(`@dnd-kit/core`) — `onDragEnd`가
+팔레트/블록 add·리페어런트·같은 부모 reposition(`moveNodeBy`+snap) 분기. `NodeView`는 flow 자식을
+`useDraggable({ disabled: isRoot || inFlow })`로 비활성. **`LayerTreePane`이 동일 reorder UX(드롭
+인텐트 → before/after 삽입선 → `moveNodeAdjacent`)를 `@dnd-kit/core`만으로 이미 구현.** export(`code.ts`·
+`spec.ts`)·미리보기는 모두 `node.children` 순서를 따른다.
+
+**범위 (In / Out)**
+- **In**: flow 자식 캔버스 드래그 활성화 + 삽입선 + 같은 컨테이너 내 순서변경, **+ flow 자식을 다른
+  컨테이너로 드래그 시 그 끝에 append(리페어런트, 기존 `moveNode` 재사용)**. 순서가 캔버스·미리보기·
+  코드/스펙 export에 일관 반영.
+- **Out → Stage C**: grid 셀 reorder(2D), 다중 선택 드래그 reorder, 캔버스 키보드 reorder,
+  per-breakpoint 레이아웃 오버라이드(#1 Stage B를 gap 오버라이드로 흡수).
+
+**의존성**: **신규 의존성 없음.** `@dnd-kit/sortable` 도입 안 함 — ① `package.json`에 `core`/`utilities`만
+(sortable 부재) ② `LayerTreePane`이 동일 reorder UX를 core만으로 이미 구현 ③ `moveNodeAdjacent`가 배열
+reorder를 이미 담당. sortable은 별도 context/sensor 모델이라 기존 수동 DnD와 공존 시 복잡도만 증가.
+**재사용 > 신규 의존성(게으른 시니어).**
+
+**캔버스(`NodeView.tsx`·`EditorShell.tsx`)**
+- `NodeView`: flow 자식 `useDraggable` 활성화(`disabled`에서 `inFlow` 제거, root만 비활성), flow 자식을
+  droppable로(leaf도 reorder 타깃). 드래그 피드백은 opacity(transform 미사용 → flex 레이아웃 보존).
+- 드롭 위치: `LayerTreePane.resolveDropIntent`와 동형 — 호버 형제 rect 대비 **주축**(부모
+  `resolveFlow().flexDirection`: row=x, column=y) 중심으로 before/after. 빈 영역 drop → 끝에 append.
+- 삽입선: 호버 형제에 before/after 인디케이터(레이어트리 `intentZone` span 동형), 로컬 상태로 렌더.
+- `EditorShell.onDragEnd`: 드래그 노드의 부모가 flow면 reposition 대신 `moveNodeAdjacent(active, over,
+  side)`; 다른 컨테이너로 drop이면 `moveNode`(append). 절대배치 부모는 기존 경로 그대로(회귀 0).
+
+**store / export**: **둘 다 무변경.** 순서변경은 기존 `moveNodeAdjacent`(children 배열 splice, 단일
+출처) 재사용. export·미리보기는 `node.children` 순서를 그대로 따르므로 reorder가 자동 반영(동작 보존).
+
+**완료 기준(Acceptance)**: flex 컨테이너의 자식을 캔버스에서 드래그해 순서를 바꾸면 `children` 배열이
+갱신되고 **캔버스·미리보기·코드 export·스펙 export 순서가 모두 일치**한다. 절대배치 자식의 기존
+드래그(reposition/리페어런트)는 회귀 없음.
+
+**vitest 케이스**(순수 로직·결과는 단위, DnD 인터랙션은 `/verify` 앱 실행으로 확인)
+- ① 삽입 판정 헬퍼(신규 순수 함수 `flowInsertSide(activeRect, overRect, dir)`): row 좌→우·column 상→하
+  before/after (4 케이스). ② store: flex 부모 A,B,C → `moveNodeAdjacent`로 reorder → children 갱신.
+  ③ export code: reorder 후 새 순서로 emit. ④ export spec: 새 순서로 나열. ⑤ 회귀: 절대배치 자식
+  드래그는 여전히 `moveNodeBy`(reorder 아님).
+
+**영향 파일**: `src/components/NodeView.tsx` · `src/app/EditorShell.tsx` ·
+`src/canvas/`(삽입 판정 헬퍼 1개) · 테스트(`editorStore.test.ts`·`export.test.ts` + 헬퍼). store/export 코어 무변경.
+
+**위험·불확실**: (R1 중) dnd-kit `collisionDetection` — flow 자식 droppable 추가가 절대 드래그 충돌
+판정에 영향 가능(단일 DndContext), 부정확 시 flow 한정 `closestCenter` 검토 — 착수 시 실험. (R2 중)
+단일 DndContext가 절대 드래그+flow reorder를 모두 처리 → `onDragEnd` 분기 정확성 + 회귀 테스트 필수.
+(R3 낮음) 드래그 피드백이 flex 레이아웃 흔들지 않게(opacity). (R4 확인) 중첩 flow reorder 1케이스 확인.
+되돌리기 어려운 변경·신규 의존성·마이그레이션 없음(전부 가역).
+
+**Stage C — 예정**: grid 템플릿 · per-breakpoint 레이아웃 오버라이드(#1 Stage B를 gap 오버라이드로 흡수).
 
 ---
 
