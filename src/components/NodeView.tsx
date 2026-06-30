@@ -12,6 +12,8 @@ import {
   resolveFlow,
   resolveFrame,
   resolveHidden,
+  resolveMargin,
+  resolvePadding,
   shadowCss,
   toSides,
 } from "../types/page";
@@ -56,8 +58,9 @@ export function NodeView({ nodeId, inFlow = false }: { nodeId: string; inFlow?: 
   const frame = resolveFrame(node, bp);
   const hidden = resolveHidden(node, bp);
 
-  const pad = toSides(node.padding, tokens);
-  const mar = toSides(node.margin, tokens);
+  // Resolve padding/margin for the active breakpoint (desktop = base value).
+  const pad = toSides(resolvePadding(node, bp), tokens);
+  const mar = toSides(resolveMargin(node, bp), tokens);
   const hasPadding = pad.top || pad.right || pad.bottom || pad.left;
 
   const setRefs = (el: HTMLElement | null) => {

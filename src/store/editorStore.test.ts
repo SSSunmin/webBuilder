@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { getBlockDef, getComponentDef, listBlocks } from "../registry";
 import { makeSpacingTokenRef, resolveFrame, resolveHidden } from "../types/page";
 import { findParentChild, useEditorStore } from "./editorStore";
+import { resolvePadding, resolveMargin } from "../types/page";
 
 const store = () => useEditorStore.getState();
 
@@ -701,6 +702,151 @@ describe("centerInParent", () => {
     store().centerInParent([a, b], "h");
     expect(store().document!.nodes[a].frame.x).toBe(10);
     expect(store().document!.nodes[b].frame.x).toBe(200);
+  });
+});
+
+describe("B1: per-breakpoint padding/margin overrides (store)", () => {
+  // 5. tablet에서 updateNodeSpacing → overrides.tablet.padding이 완전한 Sides, base 불변
+  it("updateNodeSpacing at tablet writes a complete Sides into overrides[tablet].padding, leaving base untouched", () => {
+    const id = addAt(0, 0, 100, 40);
+    // base padding을 먼저 설정
+    store().updateNodeSpacing(id, { padding: { top: 4, right: 4, bottom: 4, left: 4 } });
+    const basePadding = store().document!.nodes[id].padding;
+
+    store().setBreakpoint("tablet");
+    store().updateNodeSpacing(id, { padding: { top: 8 } });
+
+    const node = store().document!.nodes[id];
+    // base 불변
+    expect(node.padding).toEqual(basePadding);
+    // override.tablet.padding은 resolved-at-tablet을 seed로 한 완전한 Sides
+    const ov = node.overrides?.tablet?.padding;
+    expect(typeof ov).toBe("object"); // Sides, not undefined/string
+    expect((ov as { top: number }).top).toBe(8);
+    // 나머지 3면은 base에서 seed된 값(4)을 가져야 함
+    expect((ov as { right: number }).right).toBe(4);
+    expect((ov as { bottom: number }).bottom).toBe(4);
+    expect((ov as { left: number }).left).toBe(4);
+  });
+
+  // 6. desktop에서 updateNodeSpacing → base에 쓰고 override 미생성 (회귀)
+  it("updateNodeSpacing at desktop writes base only, creates no overrides (regression)", () => {
+    const id = addAt(0, 0, 100, 40);
+    // desktop이 기본값이지만 명시적으로 설정
+    store().setBreakpoint("desktop");
+    store().updateNodeSpacing(id, { padding: { top: 12 } });
+
+    const node = store().document!.nodes[id];
+    expect((node.padding as { top: number }).top).toBe(12);
+    expect(node.overrides?.tablet?.padding).toBeUndefined();
+    expect(node.overrides?.mobile?.padding).toBeUndefined();
+  });
+
+  // 7. setNodeSpacingValue @tablet → override.tablet.padding이 token-ref, base 불변
+  it("setNodeSpacingValue at tablet stores token-ref in override, leaves base unchanged", () => {
+    const id = addAt(0, 0, 100, 40);
+    store().setSpacingToken("md", 16);
+    // base에 먼저 Sides 세팅
+    store().updateNodeSpacing(id, { padding: { top: 4, right: 4, bottom: 4, left: 4 } });
+    const baseBefore = store().document!.nodes[id].padding;
+
+    store().setBreakpoint("tablet");
+    store().setNodeSpacingValue(id, "padding", makeSpacingTokenRef("md"));
+
+    const node = store().document!.nodes[id];
+    // base 불변
+    expect(node.padding).toEqual(baseBefore);
+    // override.tablet.padding은 token-ref
+    expect(node.overrides?.tablet?.padding).toBe(makeSpacingTokenRef("md"));
+  });
+
+  // 8. clearOverrideField → 필드 제거; 다른 필드 없으면 overrides.tablet 통째 삭제
+  it("clearOverrideField removes the field and drops the whole bp override when empty", () => {
+    const id = addAt(0, 0, 100, 40);
+    store().setBreakpoint("tablet");
+    store().updateNodeSpacing(id, { padding: { top: 8 } });
+
+    // override.tablet.padding이 존재함을 확인
+    expect(store().document!.nodes[id].overrides?.tablet?.padding).toBeDefined();
+
+    store().setBreakpoint("desktop");
+    store().clearOverrideField(id, "tablet", "padding");
+
+    const node = store().document!.nodes[id];
+    // padding 필드 제거됨
+    expect(node.overrides?.tablet?.padding).toBeUndefined();
+    // tablet override가 빈 객체가 됐으므로 통째 삭제
+    expect(node.overrides?.tablet).toBeUndefined();
+  });
+
+  it("clearOverrideField keeps sibling fields in the same bp override", () => {
+    const id = addAt(0, 0, 100, 40);
+    store().setBreakpoint("tablet");
+    store().updateNodeSpacing(id, { padding: { top: 8 } });
+    store().updateNodeSpacing(id, { margin: { top: 4 } });
+
+    // 두 필드 모두 존재 확인
+    expect(store().document!.nodes[id].overrides?.tablet?.padding).toBeDefined();
+    expect(store().document!.nodes[id].overrides?.tablet?.margin).toBeDefined();
+
+    store().clearOverrideField(id, "tablet", "padding");
+
+    const node = store().document!.nodes[id];
+    // padding만 제거, margin 잔존, tablet 오버라이드 자체는 살아있음
+    expect(node.overrides?.tablet?.padding).toBeUndefined();
+    expect(node.overrides?.tablet?.margin).toBeDefined();
+    expect(node.overrides?.tablet).toBeDefined();
+  });
+
+  it("clearOverrideField is a no-op on desktop", () => {
+    const id = addAt(0, 0, 100, 40);
+    store().setBreakpoint("tablet");
+    store().updateNodeSpacing(id, { padding: { top: 8 } });
+    const before = store().document!.nodes[id].overrides?.tablet?.padding;
+
+    store().clearOverrideField(id, "desktop", "padding");
+
+    // desktop은 no-op, tablet override 보존
+    expect(store().document!.nodes[id].overrides?.tablet?.padding).toEqual(before);
+  });
+
+  // 9. duplicateNode로 tablet padding override 가진 노드 복제 → 깊은 복사 (독립)
+  it("duplicateNode deep-clones tablet padding override (mutation isolation)", () => {
+    const rootId = store().document!.rootId;
+    const a = store().addNode(rootId, "Card")!;
+    store().setBreakpoint("tablet");
+    store().updateNodeSpacing(a, { padding: { top: 8, right: 8, bottom: 8, left: 8 } });
+    store().setBreakpoint("desktop");
+
+    const dup = store().duplicateNode(a)!;
+    // 클론의 override 변경 → 원본 미오염
+    store().setBreakpoint("tablet");
+    store().updateNodeSpacing(dup, { padding: { top: 99 } });
+    store().setBreakpoint("desktop");
+
+    const origPad = store().document!.nodes[a].overrides?.tablet?.padding as { top: number };
+    const dupPad = store().document!.nodes[dup].overrides?.tablet?.padding as { top: number };
+
+    expect(origPad.top).toBe(8);       // 원본 불변
+    expect(dupPad.top).toBe(99);       // 클론은 변경됨
+    // 두 객체는 다른 참조
+    expect(origPad).not.toBe(dupPad);
+  });
+
+  // 10. tablet padding override 후 undo → 원복
+  it("undo restores state before tablet padding override", () => {
+    const id = addAt(0, 0, 100, 40);
+    store().setBreakpoint("tablet");
+    store().updateNodeSpacing(id, { padding: { top: 8 } });
+
+    // override 기록됨
+    expect(store().document!.nodes[id].overrides?.tablet?.padding).toBeDefined();
+
+    store().undo();
+
+    // undo 후 tablet padding override 없음
+    const node = store().document!.nodes[id];
+    expect(node.overrides?.tablet?.padding).toBeUndefined();
   });
 });
 
