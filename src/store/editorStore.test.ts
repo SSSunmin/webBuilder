@@ -982,6 +982,14 @@ describe("setNodeLayout", () => {
     expect(node.alignItems).toBe("stretch");
   });
 
+  it("sets grid mode and keeps grid options on a container", () => {
+    const rootId = store().document!.rootId;
+    store().setNodeLayout(rootId, { layout: "grid", gridColumns: 3 });
+    const node = store().document!.nodes[rootId];
+    expect(node.layout).toBe("grid");
+    expect(node.gridColumns).toBe(3);
+  });
+
   it("drops the layout field when switched back to absolute (canonical = absent)", () => {
     const rootId = store().document!.rootId;
     store().setNodeLayout(rootId, { layout: "flex", gap: 8 });
@@ -990,6 +998,24 @@ describe("setNodeLayout", () => {
     expect(node.layout).toBeUndefined();
     // Flex options are kept so toggling back restores the prior setup.
     expect(node.gap).toBe(8);
+  });
+
+  it("drops grid layout when switched back to absolute but keeps grid options", () => {
+    const rootId = store().document!.rootId;
+    store().setNodeLayout(rootId, { layout: "grid", gridColumns: 3 });
+    store().setNodeLayout(rootId, { layout: "absolute" });
+    const node = store().document!.nodes[rootId];
+    expect(node.layout).toBeUndefined();
+    expect(node.gridColumns).toBe(3);
+  });
+
+  it("still switches flex back to absolute unchanged", () => {
+    const rootId = store().document!.rootId;
+    store().setNodeLayout(rootId, { layout: "flex", flexDirection: "column" });
+    store().setNodeLayout(rootId, { layout: "absolute" });
+    const node = store().document!.nodes[rootId];
+    expect(node.layout).toBeUndefined();
+    expect(node.flexDirection).toBe("column");
   });
 
   it("is recorded as an undoable step", () => {

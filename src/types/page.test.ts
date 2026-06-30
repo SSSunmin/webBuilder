@@ -14,6 +14,7 @@ import {
   resolveColor,
   resolveFrame,
   resolveFlow,
+  resolveGrid,
   resolveHidden,
   resolvePadding,
   resolveMargin,
@@ -81,6 +82,69 @@ describe("resolveFlow", () => {
     )!;
     expect(flow.alignItems).toBe("flex-start");
     expect(flow.justifyContent).toBe("flex-start");
+  });
+
+  it("returns null for a grid node so flex drag-reorder does not run", () => {
+    expect(resolveFlow(flexNode({ layout: "grid" }))).toBeNull();
+  });
+});
+
+describe("resolveGrid", () => {
+  it("returns null when the node is not in grid mode", () => {
+    expect(resolveGrid(flexNode())).toBeNull();
+    expect(resolveGrid(flexNode({ layout: "flex" }))).toBeNull();
+  });
+
+  it("maps counts and shared alignment fields to CSS-ready values", () => {
+    expect(
+      resolveGrid(
+        flexNode({
+          layout: "grid",
+          gridColumns: 3,
+          gridRows: 2,
+          gap: 8,
+          alignItems: "center",
+          justifyContent: "between",
+        }),
+      ),
+    ).toEqual({
+      columns: 3,
+      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+      gridTemplateRows: "repeat(2, minmax(0, 1fr))",
+      gap: 8,
+      alignItems: "center",
+      justifyContent: "space-between",
+    });
+  });
+
+  it("defaults missing, zero, and negative column counts to one safe column", () => {
+    expect(resolveGrid(flexNode({ layout: "grid" }))!.gridTemplateColumns).toBe(
+      "repeat(1, minmax(0, 1fr))",
+    );
+    expect(resolveGrid(flexNode({ layout: "grid", gridColumns: 0 }))!.gridTemplateColumns).toBe(
+      "repeat(1, minmax(0, 1fr))",
+    );
+    expect(resolveGrid(flexNode({ layout: "grid", gridColumns: -3 }))!.gridTemplateColumns).toBe(
+      "repeat(1, minmax(0, 1fr))",
+    );
+  });
+
+  it("omits auto rows when row count is absent, zero, or negative", () => {
+    expect(resolveGrid(flexNode({ layout: "grid" }))!.gridTemplateRows).toBeNull();
+    expect(resolveGrid(flexNode({ layout: "grid", gridRows: 0 }))!.gridTemplateRows).toBeNull();
+    expect(resolveGrid(flexNode({ layout: "grid", gridRows: -2 }))!.gridTemplateRows).toBeNull();
+  });
+
+  it("falls back for unknown alignment enums (never injects)", () => {
+    const grid = resolveGrid(
+      flexNode({
+        layout: "grid",
+        alignItems: "evil; }" as unknown as "center",
+        justifyContent: "x" as unknown as "center",
+      }),
+    )!;
+    expect(grid.alignItems).toBe("stretch");
+    expect(grid.justifyContent).toBe("flex-start");
   });
 });
 

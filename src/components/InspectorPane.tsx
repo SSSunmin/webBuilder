@@ -177,27 +177,40 @@ function LayoutControl({
   node: PageNode;
   onChange: (
     partial: Partial<
-      Pick<PageNode, "layout" | "flexDirection" | "gap" | "alignItems" | "justifyContent">
+      Pick<
+        PageNode,
+        | "layout"
+        | "flexDirection"
+        | "gridColumns"
+        | "gridRows"
+        | "gap"
+        | "alignItems"
+        | "justifyContent"
+      >
     >,
   ) => void;
 }) {
   const flex = node.layout === "flex";
+  const grid = node.layout === "grid";
+  const layoutValue = flex || grid ? node.layout : "absolute";
   return (
     <div className="flex flex-col gap-2">
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-muted">자식 배치</span>
         <select
           className={inputCls}
-          value={flex ? "flex" : "absolute"}
-          onChange={(e) => onChange({ layout: e.target.value === "flex" ? "flex" : "absolute" })}
+          value={layoutValue}
+          onChange={(e) => onChange({ layout: e.target.value as PageNode["layout"] })}
         >
+          <option value="grid">Grid (자동 배치)</option>
           <option value="absolute">자유 배치 (좌표)</option>
           <option value="flex">Flex (자동 흐름)</option>
         </select>
       </label>
-      {flex && (
+      {(flex || grid) && (
         <div className="flex flex-col gap-2 rounded-button border border-line2 p-2">
-          <label className="flex flex-col gap-1">
+          {flex && (
+            <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-muted">방향</span>
             <select
               className={inputCls}
@@ -212,7 +225,36 @@ function LayoutControl({
                 </option>
               ))}
             </select>
-          </label>
+            </label>
+          )}
+          {grid && (
+            <>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted">열 개수</span>
+                <input
+                  type="number"
+                  min={1}
+                  className={inputCls}
+                  value={Math.max(1, Math.round(node.gridColumns ?? 1))}
+                  onChange={(e) =>
+                    onChange({ gridColumns: e.target.value === "" ? 1 : Number(e.target.value) })
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted">행 개수</span>
+                <input
+                  type="number"
+                  min={0}
+                  className={inputCls}
+                  value={Math.max(0, Math.round(node.gridRows ?? 0))}
+                  onChange={(e) =>
+                    onChange({ gridRows: e.target.value === "" ? 0 : Number(e.target.value) })
+                  }
+                />
+              </label>
+            </>
+          )}
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-muted">간격 (gap, px)</span>
             <input
@@ -241,7 +283,7 @@ function LayoutControl({
             <span className="text-xs font-medium text-muted">교차축 정렬</span>
             <select
               className={inputCls}
-              value={node.alignItems ?? "start"}
+              value={node.alignItems ?? (grid ? "stretch" : "start")}
               onChange={(e) => onChange({ alignItems: e.target.value as FlowAlign })}
             >
               {FLEX_ALIGN.map((a) => (
