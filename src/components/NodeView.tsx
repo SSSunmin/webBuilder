@@ -1,8 +1,10 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import { useSyncExternalStore } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { getComponentDef } from "../registry";
 import { guideStore } from "../canvas/guideStore";
+import { flowDropStore } from "../canvas/flowDropStore";
 import { domSnapContext, snapResize } from "../canvas/snap";
 import { useEditorStore } from "../store/editorStore";
 import {
@@ -42,13 +44,19 @@ export function NodeView({ nodeId, inFlow = false }: { nodeId: string; inFlow?: 
   const isRoot = nodeId === rootId;
   const container = Boolean(def?.isContainer);
 
+  // Flow children are droppable too (they're reorder targets, even leaves), and
+  // draggable (Stage B canvas reorder); absolute children keep the old rules.
   const { setNodeRef: dropRef, isOver } = useDroppable({
     id: `drop:${nodeId}`,
     data: { nodeId },
-    disabled: !container,
+    disabled: !container && !inFlow,
   });
   const { setNodeRef: dragRef, listeners, attributes, transform, isDragging } =
-    useDraggable({ id: `drag:${nodeId}`, data: { nodeId }, disabled: isRoot || inFlow });
+    useDraggable({ id: `drag:${nodeId}`, data: { nodeId }, disabled: isRoot });
+
+  // Live insertion indicator when another flow child is being dragged over this one.
+  const drop = useSyncExternalStore(flowDropStore.subscribe, flowDropStore.get, () => null);
+  const dropHere = inFlow && drop && drop.overId === nodeId ? drop : null;
 
   if (!node || !def) return null;
 
@@ -207,6 +215,16 @@ export function NodeView({ nodeId, inFlow = false }: { nodeId: string; inFlow?: 
       ].join(" ")}
     >
       {def.render(node.props, childContent)}
+      {dropHere && (
+        <span
+          className="pointer-events-none absolute z-30 rounded-full bg-brand"
+          style={
+            dropHere.direction === "column"
+              ? { left: 0, right: 0, height: 3, ...(dropHere.side === "before" ? { top: -3 } : { bottom: -3 }) }
+              : { top: 0, bottom: 0, width: 3, ...(dropHere.side === "before" ? { left: -3 } : { right: -3 }) }
+          }
+        />
+      )}
       {hidden && (
         <span className="pointer-events-none absolute -top-2 right-1 z-20 rounded-chip bg-ink px-1.5 py-0.5 text-[10px] font-medium text-white">
           숨김

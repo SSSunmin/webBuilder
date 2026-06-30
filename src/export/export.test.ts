@@ -519,7 +519,7 @@ describe("color token export", () => {
   });
 
   it("a dangling ref (deleted token) drops the background, not the node", () => {
-    const { document, child } = tokenDoc();
+    const { child } = tokenDoc();
     useEditorStore.getState().removeColorToken("brand");
     const d = useEditorStore.getState().document!;
     const code = generateCode(d);
@@ -700,5 +700,24 @@ describe("flex layout (layout='flex')", () => {
     // The flow child reports size only — no @(x,y) coordinate.
     expect(spec).toMatch(/\*\*Card\*\* \(container\) — \d+×\d+/);
     expect(spec).not.toMatch(/\*\*Card\*\* \(container\) — @\(/);
+  });
+});
+
+describe("flex child order (Stage B reorder)", () => {
+  it("exports flex children in their children-array order; a reorder is reflected", () => {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Flex Order");
+    const a = useEditorStore.getState().addNode(doc.rootId, "Heading")!;
+    const b = useEditorStore.getState().addNode(doc.rootId, "Text")!;
+    useEditorStore.getState().setNodeLayout(doc.rootId, { layout: "flex" });
+
+    // Initial order: Heading (a) before Text (b) in the generated JSX body.
+    let code = generateCode(useEditorStore.getState().document!);
+    expect(code.indexOf("<Heading")).toBeLessThan(code.indexOf("<Text"));
+
+    // Reorder a after b (what a canvas drag-to-reorder resolves to) → export flips.
+    useEditorStore.getState().moveNodeAdjacent(a, b, "after");
+    code = generateCode(useEditorStore.getState().document!);
+    expect(code.indexOf("<Text")).toBeLessThan(code.indexOf("<Heading"));
   });
 });
