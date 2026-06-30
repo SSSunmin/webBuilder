@@ -1,9 +1,9 @@
 ---
 type: Reference
 title: 데이터 모델 — PageDocument / PageNode
-description: 저장 단위인 PageDocument와 노드 트리를 구성하는 PageNode, NodeFrame, Sides, DocumentTokens, NodeOverride, EventBinding 타입 정의. v2에서 글꼴·간격 토큰 추가. v3(Stage A)에서 레이아웃 모드(flex) 추가. v4(Stage B1)에서 NodeOverride에 padding/margin 추가 및 resolvePadding/resolveMargin 신규.
+description: 저장 단위인 PageDocument와 노드 트리를 구성하는 PageNode, NodeFrame, Sides, DocumentTokens, NodeOverride, EventBinding 타입 정의. v2에서 글꼴·간격 토큰 추가. v3(Stage A)에서 레이아웃 모드(flex) 추가. v4(Stage B1)에서 NodeOverride에 padding/margin 추가 및 resolvePadding/resolveMargin 신규. v5(Stage B2)에서 NodeOverride에 background 추가 및 resolveBackground 신규.
 resource: src/types/page.ts, src/types/events.ts, src/types/component.ts
-tags: [data-model, types, page, node, design-tokens, layout, flex, breakpoint, override, spacing]
+tags: [data-model, types, page, node, design-tokens, layout, flex, breakpoint, override, spacing, background]
 timestamp: 2026-06-30
 ---
 
@@ -240,6 +240,7 @@ interface NodeOverride {
   hidden?: boolean;
   padding?: Sides | string;   // Stage B1: 완전한 값(통째 교체, per-side 병합 아님)
   margin?: Sides | string;    // Stage B1: 완전한 값(통째 교체, per-side 병합 아님)
+  background?: string;        // Stage B2: 리터럴 색상 또는 `token:<key>` 색상 토큰 참조
 }
 ```
 
@@ -248,17 +249,22 @@ interface NodeOverride {
   - `frame`은 `Partial<NodeFrame>` — 축별 부분 병합(예: `w`만 오버라이드하면 `x/y/h`는 base 상속).
   - `padding`·`margin`은 `Sides | string` — **완전한 값 통째 교체**. per-side 병합 없음. 오버라이드가 정의되면 base 전체를 대체한다.
 
-### resolve 함수 — Stage B1 신규
+### resolve 함수 — Stage B1/B2 신규
 
 ```ts
 function resolvePadding(node: PageNode, bp: BreakpointId): Sides | string | undefined
 function resolveMargin(node: PageNode, bp: BreakpointId): Sides | string | undefined
+function resolveBackground(node: PageNode, bp: BreakpointId): string | undefined
 ```
 
-- **데스크톱-퍼스트 캐스케이드**: `node.padding` (base) → tablet override가 정의되면 교체 → mobile override가 정의되면 교체.
-- `resolveFrame`과 캐스케이드 순서 동일. 단, `frame`처럼 축별 merge가 아니라 **정의된 override가 전체를 통째 치환**한다.
-- **tablet → mobile 상속**: tablet에 override가 있고 mobile에 없으면, mobile은 tablet 값을 상속한다(CSS `@media max-width` cascade와 동일).
-- 반환값은 raw 값(`Sides | token ref | undefined`). 호출부가 `toSides(result, tokens)`로 `Sides`로 변환한다.
+세 함수 모두 **데스크톱-퍼스트 캐스케이드** 구조가 동일하다:
+
+- **cascade 순서**: base(desktop) 값 → tablet override가 정의되면 통째 교체 → mobile override가 정의되면 통째 교체.
+- **tablet → mobile 상속**: tablet에 override가 있고 mobile에 없으면 mobile은 tablet 값을 상속한다(CSS `@media max-width` cascade와 동일).
+- `frame`처럼 축별 merge가 아니라 **정의된 override가 전체를 통째 치환**한다.
+- 반환값은 raw 값. 호출부가 변환 함수를 적용한다:
+  - `resolvePadding` / `resolveMargin`: 반환 `Sides | token ref | undefined`. 호출부가 `toSides(result, tokens)`로 `Sides`로 변환.
+  - `resolveBackground`: 반환 `string | undefined` (리터럴 색상 또는 `token:<key>`). 호출부가 `resolveColor(result, tokens)`를 적용.
 - `resolveFrame(node, bp)`: 축별 부분 병합으로 최종 frame 계산(기존 동작 유지).
 - `resolveHidden(node, bp)`: 동일 캐스케이드로 hidden 상태 계산(기존 동작 유지).
 
