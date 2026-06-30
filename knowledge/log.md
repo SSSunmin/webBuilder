@@ -2,6 +2,12 @@
 
 OKF 번들의 변경 이력. 최신 항목이 위. `/okf` 실행 시 knowledge-curator가 여기에 기록한다.
 
+## 2026-06-30 (#4 Stage B — flex 자식 캔버스 드래그 순서변경)
+
+- `architecture/editor-architecture.md`: `onDragOver` 섹션 신설(flowDropStore 갱신 역할), `onDragEnd`에 flex 자식 분기(reorder→`moveNodeAdjacent`/reparent→`moveNode`) 추가, "flex 자식 캔버스 DnD — Stage B" 섹션 신설(`resolveFlowDrag` 순수 함수·반환 케이스표·`flowDropStore` 삽입 인디케이터·`NodeView` 활성화 조건·export 자동 반영). frontmatter resource/tags/timestamp 갱신. 신규 의존성 0.
+- `store/editor-store.md`: `moveNodeAdjacent` 설명에 Stage B reorder 연결 한 줄 추가.
+- grid 배치·반응형 레이아웃은 Stage C 대기. 인터랙션 브라우저 QA는 아직 수동 완료 전(자율 구현 상태).
+
 ## 2026-06-30 (레이아웃 모델 Stage A — flex 컨테이너)
 
 - `data-model/page-node.md`: `PageNode`에 신규 선택 필드 5개(`layout`/`flexDirection`/`gap`/`alignItems`/`justifyContent`) 추가. 신규 타입 `LayoutMode`/`FlowAlign`/`FlowJustify` 문서화. "레이아웃 모드(flex) — Stage A" 섹션 신설: `resolveFlow` 동작·enum→CSS 매핑표·하위호환(필드 없음=absolute)·신뢰경계(gap sanitize·enum 폴백). frontmatter description/tags/timestamp 갱신.

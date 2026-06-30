@@ -12,7 +12,7 @@
 | 1 | 반응형 export 강건화 | Stage A 완료 · B [대기] | frame/hidden 반응형 생성(A). B=per-bp padding/margin(B1)·background(B2) 오버라이드 |
 | 2 | 이벤트/액션 완성 | 완료 | submit·custom 액션을 실제 코드로 생성 |
 | 3 | 디자인 토큰/테마 | v2(색상·폰트·간격) 완료 | 문서 전역 색상·글꼴·간격 토큰 + 노드 참조 + export(:root/var) |
-| 4 | 레이아웃 모델(flex/grid) | Stage A 완료 · B [대기] | flex 컨테이너(A). B=flex 자식 캔버스 드래그 순서변경(삽입선). grid·반응형 레이아웃은 C |
+| 4 | 레이아웃 모델(flex/grid) | Stage A 완료 · B 구현(수동 QA 대기) | flex 컨테이너(A). B=flex 자식 캔버스 드래그 순서변경(삽입선). grid·반응형 레이아웃은 C |
 
 ---
 
@@ -183,7 +183,20 @@ export 코드도 동일하게 동작한다.
 - 부수: v2에서 누락됐던 `SnapBox.margin` 타입 갭(`Sides|string`) 보정.
 - 검증: typecheck·build 통과, 테스트 225개(`resolveFlow`·flex export·`setNodeLayout` +11).
 
-### Stage B — flex 자식 캔버스 드래그 순서변경  · 상태 [대기]
+### Stage B — flex 자식 캔버스 드래그 순서변경  · 상태 구현 완료 · 수동 QA 대기
+
+**구현 완료 (2026-06-30, 브랜치 `task/4-flex-reorder`)** — 신규 의존성 0(기존 `@dnd-kit/core` +
+`moveNodeAdjacent` 재사용, LayerTreePane 패턴):
+- 순수 로직 `canvas/flowReorder.ts`: `resolveFlowDrag(nodes, active, over, rects)` → reorder/reparent/null.
+  같은 flex 부모 형제 = 주축 중심 before/after(`flowDropSide`), 다른 컨테이너 = append.
+- `NodeView`: flow 자식 드래그/드롭 활성화(leaf도 reorder 타깃), `flowDropStore` 구독해 삽입선 렌더.
+- `EditorShell`: `onDragOver`→인디케이터, `onDragEnd` flow 분기(reorder→`moveNodeAdjacent`/reparent→`moveNode`,
+  절대배치 경로는 비-flow에만 → 회귀 0). store/export 코어 무변경(children 순서 자동 반영).
+- 검증(자동): lint 0 errors, build·typecheck 통과, 테스트 235개(`flowReorder` 순수 로직 9 + export 순서 1).
+- ⚠️ **수동 QA 대기**: 캔버스 드래그 인터랙션 자체(삽입선 위치·reorder 체감·R1 collisionDetection의
+  절대 드래그 간섭)는 자율 루프가 검증 불가 — 브라우저에서 시각 확인 후 머지. PR #에 명시.
+
+**Stage C — 예정**: grid 템플릿 · per-breakpoint 레이아웃 오버라이드.
 
 **목표**: flow(flex) 자식을 캔버스에서 드래그해 순서를 바꾼다(삽입선 + 순서변경). 현재 flow 자식은
 드래그 비활성(순서변경은 레이어트리 ↑↓·DnD로만 가능).
