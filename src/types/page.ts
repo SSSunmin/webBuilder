@@ -97,10 +97,15 @@ export function shadowCss(spec: ShadowSpec | undefined): string | undefined {
   return `${spec.x}px ${spec.y}px ${Math.max(0, spec.blur)}px ${spec.spread}px rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
-/** Per-breakpoint override of a node's layout. Only the changed fields are kept. */
+/** Per-breakpoint override of a node's layout. Only the changed fields are kept.
+ * frame is a per-axis partial merge; padding/margin hold a COMPLETE value
+ * (Sides or token ref) that replaces the inherited one wholesale (not per-side). */
 export interface NodeOverride {
   frame?: Partial<NodeFrame>;
   hidden?: boolean;
+  padding?: Sides | string;
+  margin?: Sides | string;
+  background?: string;
 }
 
 /** How a container arranges its children. Absent/"absolute" (the default and the
@@ -204,6 +209,53 @@ export function resolveHidden(node: PageNode, bp: BreakpointId): boolean {
   if (bp === "tablet" || bp === "mobile") hidden = node.overrides?.tablet?.hidden ?? hidden;
   if (bp === "mobile") hidden = node.overrides?.mobile?.hidden ?? hidden;
   return hidden;
+}
+
+/**
+ * Resolve a node's padding at a breakpoint, cascading desktop-first like
+ * resolveFrame — but padding is a COMPLETE value, so a defined override replaces
+ * the inherited one wholesale (no per-side merge). A tablet override carries
+ * into mobile when mobile defines none (matches the CSS @media cascade).
+ * Returns the raw value (Sides | token ref | undefined); the caller applies
+ * toSides(…, tokens).
+ */
+export function resolvePadding(node: PageNode, bp: BreakpointId): Sides | string | undefined {
+  let v = node.padding;
+  if (bp === "tablet" || bp === "mobile") {
+    if (node.overrides?.tablet?.padding !== undefined) v = node.overrides.tablet.padding;
+  }
+  if (bp === "mobile") {
+    if (node.overrides?.mobile?.padding !== undefined) v = node.overrides.mobile.padding;
+  }
+  return v;
+}
+
+/** Resolve a node's margin at a breakpoint (desktop-first, whole-value replace). */
+export function resolveMargin(node: PageNode, bp: BreakpointId): Sides | string | undefined {
+  let v = node.margin;
+  if (bp === "tablet" || bp === "mobile") {
+    if (node.overrides?.tablet?.margin !== undefined) v = node.overrides.tablet.margin;
+  }
+  if (bp === "mobile") {
+    if (node.overrides?.mobile?.margin !== undefined) v = node.overrides.mobile.margin;
+  }
+  return v;
+}
+
+/**
+ * Resolve a node's background at a breakpoint (desktop-first, whole-value
+ * replace — like resolvePadding). Returns the raw value (literal color | token
+ * ref | undefined); the caller applies resolveColor(…, tokens).
+ */
+export function resolveBackground(node: PageNode, bp: BreakpointId): string | undefined {
+  let v = node.background;
+  if (bp === "tablet" || bp === "mobile") {
+    if (node.overrides?.tablet?.background !== undefined) v = node.overrides.tablet.background;
+  }
+  if (bp === "mobile") {
+    if (node.overrides?.mobile?.background !== undefined) v = node.overrides.mobile.background;
+  }
+  return v;
 }
 
 // --- Design tokens --------------------------------------------------------

@@ -12,9 +12,12 @@ import {
   isValidTokenKey,
   makeColorTokenRef,
   makeSpacingTokenRef,
+  resolveBackground,
   resolveColor,
   resolveFrame,
   resolveHidden,
+  resolveMargin,
+  resolvePadding,
   spacingTokenKey,
   toSides,
 } from "../types/page";
@@ -79,12 +82,18 @@ function SpacingControl({
   tokens,
   onSetSides,
   onSetToken,
+  overridden = false,
+  onClearOverride,
 }: {
   label: string;
   value: Sides | string | undefined;
   tokens: DocumentTokens | undefined;
   onSetSides: (side: keyof Sides, v: number) => void;
   onSetToken: (key: string) => void;
+  /** True when the active (non-desktop) breakpoint overrides this field. */
+  overridden?: boolean;
+  /** Clear this field's breakpoint override (shown only when overridden). */
+  onClearOverride?: () => void;
 }) {
   const tokenKeys = Object.keys(tokens?.spacing ?? {});
   const isToken = isSpacingTokenRef(value);
@@ -92,7 +101,26 @@ function SpacingControl({
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-muted">{label}</span>
+      <span className="flex items-center gap-1.5 text-xs font-medium text-muted">
+        {label}
+        {overridden && (
+          <>
+            <span className="rounded-chip bg-brand-pale px-1.5 py-0.5 text-[10px] font-semibold text-brand">
+              이 화면서 변경됨
+            </span>
+            {onClearOverride && (
+              <button
+                onClick={onClearOverride}
+                title="이 브레이크포인트 오버라이드 해제"
+                aria-label="오버라이드 해제"
+                className="rounded px-1 text-muted hover:bg-line2 hover:text-ink"
+              >
+                ↺
+              </button>
+            )}
+          </>
+        )}
+      </span>
       {tokenKeys.length > 0 && (
         <select
           className={inputCls}
@@ -452,10 +480,16 @@ function BackgroundControl({
   background,
   tokens,
   onChange,
+  overridden = false,
+  onClearOverride,
 }: {
   background: string | undefined;
   tokens: DocumentTokens | undefined;
   onChange: (value: string) => void;
+  /** True when the active (non-desktop) breakpoint overrides the background. */
+  overridden?: boolean;
+  /** Clear the background breakpoint override (shown only when overridden). */
+  onClearOverride?: () => void;
 }) {
   const tokenKeys = Object.keys(tokens?.colors ?? {});
   const isToken = isColorTokenRef(background);
@@ -468,7 +502,26 @@ function BackgroundControl({
 
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-muted">배경색</span>
+      <span className="flex items-center gap-1.5 text-xs font-medium text-muted">
+        배경색
+        {overridden && (
+          <>
+            <span className="rounded-chip bg-brand-pale px-1.5 py-0.5 text-[10px] font-semibold text-brand">
+              이 화면서 변경됨
+            </span>
+            {onClearOverride && (
+              <button
+                onClick={onClearOverride}
+                title="이 브레이크포인트 오버라이드 해제"
+                aria-label="오버라이드 해제"
+                className="rounded px-1 text-muted hover:bg-line2 hover:text-ink"
+              >
+                ↺
+              </button>
+            )}
+          </>
+        )}
+      </span>
       {tokenKeys.length > 0 && (
         <select
           className={inputCls}
@@ -824,6 +877,7 @@ export function InspectorPane() {
   const bp = useEditorStore((s) => s.activeBreakpoint);
   const setNodeHidden = useEditorStore((s) => s.setNodeHidden);
   const resetOverride = useEditorStore((s) => s.resetOverride);
+  const clearOverrideField = useEditorStore((s) => s.clearOverrideField);
 
   const def = node ? getComponentDef(node.type) : undefined;
 
@@ -891,8 +945,10 @@ export function InspectorPane() {
                 <FrameField label="높이(H)" value={frame!.h} onChange={(v) => setFrame("h", v)} />
               </div>
               <BackgroundControl
-                background={node.background}
+                background={resolveBackground(node, bp)}
                 tokens={tokens}
+                overridden={isCustomBp && node.overrides?.[bp]?.background !== undefined}
+                onClearOverride={() => clearOverrideField(selectedId, bp, "background")}
                 onChange={(v) => setNodeBackground(selectedId, v)}
               />
               <label className="flex flex-col gap-1">
@@ -977,8 +1033,10 @@ export function InspectorPane() {
               {def.isContainer && (
                 <SpacingControl
                   label="패딩"
-                  value={node.padding}
+                  value={resolvePadding(node, bp)}
                   tokens={tokens}
+                  overridden={isCustomBp && node.overrides?.[bp]?.padding !== undefined}
+                  onClearOverride={() => clearOverrideField(selectedId, bp, "padding")}
                   onSetSides={(side, v) =>
                     updateNodeSpacing(selectedId, { padding: { [side]: v } })
                   }
@@ -986,7 +1044,7 @@ export function InspectorPane() {
                     setNodeSpacingValue(
                       selectedId,
                       "padding",
-                      key === "" ? toSides(node.padding, tokens) : makeSpacingTokenRef(key),
+                      key === "" ? toSides(resolvePadding(node, bp), tokens) : makeSpacingTokenRef(key),
                     )
                   }
                 />
@@ -994,8 +1052,10 @@ export function InspectorPane() {
               {!isRoot && (
                 <SpacingControl
                   label="마진"
-                  value={node.margin}
+                  value={resolveMargin(node, bp)}
                   tokens={tokens}
+                  overridden={isCustomBp && node.overrides?.[bp]?.margin !== undefined}
+                  onClearOverride={() => clearOverrideField(selectedId, bp, "margin")}
                   onSetSides={(side, v) =>
                     updateNodeSpacing(selectedId, { margin: { [side]: v } })
                   }
@@ -1003,7 +1063,7 @@ export function InspectorPane() {
                     setNodeSpacingValue(
                       selectedId,
                       "margin",
-                      key === "" ? toSides(node.margin, tokens) : makeSpacingTokenRef(key),
+                      key === "" ? toSides(resolveMargin(node, bp), tokens) : makeSpacingTokenRef(key),
                     )
                   }
                 />

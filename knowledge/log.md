@@ -8,6 +8,18 @@ OKF 번들의 변경 이력. 최신 항목이 위. `/okf` 실행 시 knowledge-c
 - `store/editor-store.md`: `moveNodeAdjacent` 설명에 Stage B reorder 연결 한 줄 추가.
 - grid 배치·반응형 레이아웃은 Stage C 대기. 인터랙션 브라우저 QA는 아직 수동 완료 전(자율 구현 상태).
 
+## 2026-06-30 (#1 Stage B2 — per-bp background 오버라이드)
+
+- `data-model/page-node.md`: `NodeOverride`에 `background?: string` 추가. 신규 `resolveBackground(node,bp)` 문서화 — `resolvePadding`/`resolveMargin`과 동일한 데스크톱-퍼스트 캐스케이드·통째 교체·tablet→mobile 상속 구조. 반환 raw 값(리터럴 색상 | `token:<key>` | undefined), 호출부가 `resolveColor(…,tokens)` 적용. frontmatter description/tags 갱신.
+- `store/editor-store.md`: `setNodeBackground` bp 인지화(desktop이면 base, 그 외면 `overrides[bp].background`에 저장, 형제 override 필드 보존). `clearOverrideField` field 타입에 `"background"` 추가. frontmatter description/tags 갱신.
+- `export/export-format.md`: `overrideDecls` 표에 `background` 행 추가. 신규 `overrideBackgroundDecl`(항상 emit, 유효 색→그 색, 유효 토큰→`var(--color-*)`, dangling/unsafe→`transparent`, A03 동일 화이트리스트). spec.ts `overrideLines`에 `bgSummary(ov.background, tokens)` 추가. frontmatter description/tags 갱신.
+
+## 2026-06-30 (#1 Stage B1 — per-bp padding/margin 오버라이드)
+
+- `data-model/page-node.md`: `NodeOverride`에 `padding?: Sides|string`·`margin?: Sides|string` 추가. frame(축별 부분 병합) vs padding/margin(완전한 값 통째 교체) 차이 명시. 신규 `resolvePadding(node,bp)`·`resolveMargin(node,bp)` cascade 규칙 문서화(데스크톱-퍼스트, tablet→mobile 상속, raw 값 반환 후 호출부가 toSides 적용). frontmatter description/tags 갱신.
+- `store/editor-store.md`: `updateNodeSpacing`·`setNodeSpacingValue` bp 인지화 설명 갱신(비-desktop이면 `overrides[bp]`에 완전한 Sides 기록). 신규 `clearOverrideField(id,bp,field)` 액션 추가(필드 1개 해제, 빈 override 자동 삭제, undo 태그 `clearov:<id>:<bp>:<field>`). `cloneOverrides` 깊은 복사 확장(padding/margin Sides 객체 복사) 문서화. `centerInParent` bp 인지(`resolvePadding` 사용) 추가. frontmatter description/tags 갱신.
+- `export/export-format.md`: `overrideDecls`에 padding/margin 지원 추가, `tokens` 파라미터 명시. 신규 `overrideSpacingDecl`(0도 emit, dangling → `0`, base의 `spacingDecl`과 다른 이유 설명). spec.ts `overrideLines`의 pad/margin 직렬화(0→"0") 문서화. CSS cascade 주의사항(tablet @media가 375px에도 적용). frontmatter description/tags 갱신.
+
 ## 2026-06-30 (레이아웃 모델 Stage A — flex 컨테이너)
 
 - `data-model/page-node.md`: `PageNode`에 신규 선택 필드 5개(`layout`/`flexDirection`/`gap`/`alignItems`/`justifyContent`) 추가. 신규 타입 `LayoutMode`/`FlowAlign`/`FlowJustify` 문서화. "레이아웃 모드(flex) — Stage A" 섹션 신설: `resolveFlow` 동작·enum→CSS 매핑표·하위호환(필드 없음=absolute)·신뢰경계(gap sanitize·enum 폴백). frontmatter description/tags/timestamp 갱신.

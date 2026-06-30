@@ -10,10 +10,13 @@ import { useEditorStore } from "../store/editorStore";
 import {
   BREAKPOINTS,
   documentFontFamily,
+  resolveBackground,
   resolveColor,
   resolveFlow,
   resolveFrame,
   resolveHidden,
+  resolveMargin,
+  resolvePadding,
   shadowCss,
   toSides,
 } from "../types/page";
@@ -27,9 +30,12 @@ export function NodeView({ nodeId, inFlow = false }: { nodeId: string; inFlow?: 
   const node = useEditorStore((s) => s.document?.nodes[nodeId]);
   // Resolve a token-referencing background to its literal color, selecting the
   // computed string so the canvas re-renders live when the token value changes.
-  const background = useEditorStore((s) =>
-    resolveColor(s.document?.nodes[nodeId]?.background, s.document?.meta.tokens),
-  );
+  const background = useEditorStore((s) => {
+    const n = s.document?.nodes[nodeId];
+    return n
+      ? resolveColor(resolveBackground(n, s.activeBreakpoint), s.document?.meta.tokens)
+      : undefined;
+  });
   const tokens = useEditorStore((s) => s.document?.meta.tokens);
   const rootId = useEditorStore((s) => s.document?.rootId);
   const selected = useEditorStore((s) => s.selectedIds.includes(nodeId));
@@ -64,8 +70,9 @@ export function NodeView({ nodeId, inFlow = false }: { nodeId: string; inFlow?: 
   const frame = resolveFrame(node, bp);
   const hidden = resolveHidden(node, bp);
 
-  const pad = toSides(node.padding, tokens);
-  const mar = toSides(node.margin, tokens);
+  // Resolve padding/margin for the active breakpoint (desktop = base value).
+  const pad = toSides(resolvePadding(node, bp), tokens);
+  const mar = toSides(resolveMargin(node, bp), tokens);
   const hasPadding = pad.top || pad.right || pad.bottom || pad.left;
 
   const setRefs = (el: HTMLElement | null) => {

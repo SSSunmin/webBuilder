@@ -24,18 +24,31 @@ const OVERRIDE_BREAKPOINTS = BREAKPOINTS.filter(
  * node line. Desktop (base) is not emitted; only tablet/mobile that actually
  * override. Hidden wins over a frame override.
  */
-function overrideLines(node: PageNode, depth: number): string[] {
+function overrideLines(
+  node: PageNode,
+  depth: number,
+  tokens: DocumentTokens | undefined,
+): string[] {
   const lines: string[] = [];
   const indent = "  ".repeat(depth + 1);
   for (const bp of OVERRIDE_BREAKPOINTS) {
     const ov = node.overrides?.[bp.id];
     if (!ov) continue;
+    // Hidden wins — a hidden node's other overrides don't render.
     if (resolveHidden(node, bp.id)) {
       lines.push(`${indent}- ${bp.label}: 숨김`);
-    } else if (ov.frame) {
-      const f = resolveFrame(node, bp.id);
-      lines.push(`${indent}- ${bp.label}: @(${f.x},${f.y}) ${f.w}×${f.h}`);
+      continue;
     }
+    const parts: string[] = [];
+    if (ov.frame) {
+      const f = resolveFrame(node, bp.id);
+      parts.push(`@(${f.x},${f.y}) ${f.w}×${f.h}`);
+    }
+    // 0 prints as "0" (spacingField returns null for an all-zero literal).
+    if (ov.padding !== undefined) parts.push(`pad ${spacingField(ov.padding, tokens) ?? "0"}`);
+    if (ov.margin !== undefined) parts.push(`margin ${spacingField(ov.margin, tokens) ?? "0"}`);
+    if (ov.background !== undefined) parts.push(bgSummary(ov.background, tokens));
+    if (parts.length) lines.push(`${indent}- ${bp.label}: ${parts.join(", ")}`);
   }
   return lines;
 }
@@ -159,7 +172,7 @@ function renderNode(
     doc.meta.tokens,
     inFlow,
   )}${summary ? ` — ${summary}` : ""}`;
-  const lines = [line, ...overrideLines(node, depth), ...eventLines(node, depth)];
+  const lines = [line, ...overrideLines(node, depth, doc.meta.tokens), ...eventLines(node, depth)];
   // Children of a flex container flow, so they report size only (no x/y).
   const childInFlow = Boolean(def?.isContainer && resolveFlow(node));
   for (const childId of node.children) {
