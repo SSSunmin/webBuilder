@@ -10,6 +10,7 @@ import {
   isValidTokenKey,
   makeColorTokenRef,
   makeSpacingTokenRef,
+  resolveBackground,
   resolveColor,
   resolveFrame,
   resolveFlow,
@@ -444,5 +445,83 @@ describe("resolveMargin", () => {
       tablet: { margin: { top: 99, right: 99, bottom: 99, left: 99 } },
     });
     expect(resolveMargin(node, "desktop")).toEqual(base);
+  });
+});
+
+// --- B2: resolveBackground ---
+
+/** Helper: node with explicit base background and optional overrides. */
+function bgNode(
+  base: PageNode["background"],
+  overrides?: PageNode["overrides"],
+): PageNode {
+  return {
+    id: "bg",
+    type: "Card",
+    props: {},
+    children: [],
+    frame: { x: 0, y: 0, w: 100, h: 100 },
+    background: base,
+    overrides,
+  };
+}
+
+describe("resolveBackground", () => {
+  // 1. 오버라이드 없음 → 모든 BP에서 base 반환
+  it("returns base background for all breakpoints when no overrides exist", () => {
+    const node = bgNode("#ff0000");
+    expect(resolveBackground(node, "desktop")).toBe("#ff0000");
+    expect(resolveBackground(node, "tablet")).toBe("#ff0000");
+    expect(resolveBackground(node, "mobile")).toBe("#ff0000");
+  });
+
+  // 2. tablet override → tablet에서 적용, mobile에서 상속, base/desktop 불변
+  it("tablet override applies at tablet and cascades into mobile; desktop stays at base", () => {
+    const node = bgNode("#ffffff", { tablet: { background: "#0000ff" } });
+    expect(resolveBackground(node, "desktop")).toBe("#ffffff"); // base 불변
+    expect(resolveBackground(node, "tablet")).toBe("#0000ff"); // override 적용
+    expect(resolveBackground(node, "mobile")).toBe("#0000ff"); // tablet 상속
+  });
+
+  // 3. mobile override → mobile에서 mobile 값이 승
+  it("mobile override wins over tablet cascade at mobile breakpoint", () => {
+    const node = bgNode("#ffffff", {
+      tablet: { background: "#0000ff" },
+      mobile: { background: "#00ff00" },
+    });
+    expect(resolveBackground(node, "tablet")).toBe("#0000ff");
+    expect(resolveBackground(node, "mobile")).toBe("#00ff00"); // mobile 값이 승
+  });
+
+  // 4. token ref override → 통째 교체로 보존 (resolveColor 없이 raw ref 반환)
+  it("returns a color-token-ref override as-is (whole-value replace)", () => {
+    const ref = makeColorTokenRef("brand");
+    const node = bgNode("#ffffff", { tablet: { background: ref } });
+    expect(resolveBackground(node, "tablet")).toBe(ref);
+    expect(resolveBackground(node, "mobile")).toBe(ref); // tablet 상속
+  });
+
+  // 5. desktop은 항상 base (override가 있어도 desktop에는 영향 없음)
+  it("desktop always returns the base value regardless of tablet/mobile overrides", () => {
+    const node = bgNode("#aabbcc", {
+      tablet: { background: "#111111" },
+      mobile: { background: "#222222" },
+    });
+    expect(resolveBackground(node, "desktop")).toBe("#aabbcc");
+  });
+
+  // 6. base가 undefined일 때도 override 없으면 undefined 반환
+  it("returns undefined when base is absent and no overrides exist", () => {
+    const node = bgNode(undefined);
+    expect(resolveBackground(node, "desktop")).toBeUndefined();
+    expect(resolveBackground(node, "tablet")).toBeUndefined();
+    expect(resolveBackground(node, "mobile")).toBeUndefined();
+  });
+
+  // 7. mobile-only override → tablet에서는 base, mobile에서만 override
+  it("mobile-only override does not affect tablet (tablet stays at base)", () => {
+    const node = bgNode("#ffffff", { mobile: { background: "#999999" } });
+    expect(resolveBackground(node, "tablet")).toBe("#ffffff"); // base 유지
+    expect(resolveBackground(node, "mobile")).toBe("#999999"); // mobile override
   });
 });

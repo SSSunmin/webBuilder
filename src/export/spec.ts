@@ -47,6 +47,7 @@ function overrideLines(
     // 0 prints as "0" (spacingField returns null for an all-zero literal).
     if (ov.padding !== undefined) parts.push(`pad ${spacingField(ov.padding, tokens) ?? "0"}`);
     if (ov.margin !== undefined) parts.push(`margin ${spacingField(ov.margin, tokens) ?? "0"}`);
+    if (ov.background !== undefined) parts.push(bgSummary(ov.background, tokens));
     if (parts.length) lines.push(`${indent}- ${bp.label}: ${parts.join(", ")}`);
   }
   return lines;

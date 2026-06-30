@@ -8,6 +8,7 @@ import { useEditorStore } from "../store/editorStore";
 import {
   BREAKPOINTS,
   documentFontFamily,
+  resolveBackground,
   resolveColor,
   resolveFlow,
   resolveFrame,
@@ -27,9 +28,12 @@ export function NodeView({ nodeId, inFlow = false }: { nodeId: string; inFlow?: 
   const node = useEditorStore((s) => s.document?.nodes[nodeId]);
   // Resolve a token-referencing background to its literal color, selecting the
   // computed string so the canvas re-renders live when the token value changes.
-  const background = useEditorStore((s) =>
-    resolveColor(s.document?.nodes[nodeId]?.background, s.document?.meta.tokens),
-  );
+  const background = useEditorStore((s) => {
+    const n = s.document?.nodes[nodeId];
+    return n
+      ? resolveColor(resolveBackground(n, s.activeBreakpoint), s.document?.meta.tokens)
+      : undefined;
+  });
   const tokens = useEditorStore((s) => s.document?.meta.tokens);
   const rootId = useEditorStore((s) => s.document?.rootId);
   const selected = useEditorStore((s) => s.selectedIds.includes(nodeId));
