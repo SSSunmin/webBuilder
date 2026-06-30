@@ -1,10 +1,10 @@
 ---
 type: Reference
 title: 에디터 스토어 (Zustand)
-description: useEditorStore 상태 구조, 전체 액션 목록, undo/redo coalescing 메커니즘, breakpoint 편집 모드. v2에서 글꼴·간격 토큰 액션 추가.
+description: useEditorStore 상태 구조, 전체 액션 목록, undo/redo coalescing 메커니즘, breakpoint 편집 모드. v2에서 글꼴·간격 토큰 액션 추가. v3(Stage A)에서 setNodeLayout 액션 추가.
 resource: src/store/editorStore.ts
-tags: [store, zustand, undo-redo, state, breakpoint, design-tokens]
-timestamp: 2026-06-29
+tags: [store, zustand, undo-redo, state, breakpoint, design-tokens, layout, flex]
+timestamp: 2026-06-30
 ---
 
 # 에디터 스토어 (Zustand)
@@ -52,6 +52,7 @@ tag === null     →  항상 새 스냅샷 (이산적 액션)
 - 색상 토큰 편집: `token:color:<key>` (색상 피커 드래그 중 coalesce)
 - 글꼴 토큰 편집: `token:font:<key>`
 - 간격 토큰 편집: `token:spacing:<key>`
+- 레이아웃 편집: `layout:<id>:<keys>` (gap 드래그 중 coalesce; 방향·정렬은 각자 별도 undo step)
 
 `selectNode()` 호출 시 `lastTag: null`로 초기화 → 선택이 바뀌면 coalescing 세션 종료.
 
@@ -87,6 +88,7 @@ tag === null     →  항상 새 스냅샷 (이산적 액션)
 | `moveNodeBy(id, dx, dy, tag?)` | null (기본) | 활성 bp 기준 resolve 후 이동 |
 | `setNodeBackground(id, bg)` | `bg:<id>` | background 색상 (리터럴 또는 `token:<key>` 참조 모두 가능) |
 | `setNodeRadius(id, r)` | `radius:<id>` | borderRadius (0 이상 정수로 클램프) |
+| `setNodeLayout(id, partial)` | `layout:<id>:<keys>` | 컨테이너 자식 배치 모드·flex 옵션 부분 갱신. `layout`이 `"flex"`가 아니면 `layout` 필드 자체를 삭제(canonical absolute = 필드 없음). flex 전용 옵션(`flexDirection`/`gap`/`alignItems`/`justifyContent`)은 absolute 전환 후에도 잔류 — 다시 flex로 토글하면 이전 설정 복원. |
 | `updateNodeShadow(id, partial)` | `shadow:<id>:<fields>` | 픽셀 그림자(ShadowSpec) 부분 병합 (없으면 DEFAULT_SHADOW 생성) |
 | `clearNodeShadow(id)` | null | 그림자 제거 (boxShadow → undefined) |
 | `updateNodeSpacing(id, {padding?, margin?})` | `spacing:...` | padding/margin 부분 업데이트. 토큰 참조 중인 노드는 resolve 후 Sides로 전환 |

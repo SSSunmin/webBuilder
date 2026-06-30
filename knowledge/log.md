@@ -2,6 +2,14 @@
 
 OKF 번들의 변경 이력. 최신 항목이 위. `/okf` 실행 시 knowledge-curator가 여기에 기록한다.
 
+## 2026-06-30 (레이아웃 모델 Stage A — flex 컨테이너)
+
+- `data-model/page-node.md`: `PageNode`에 신규 선택 필드 5개(`layout`/`flexDirection`/`gap`/`alignItems`/`justifyContent`) 추가. 신규 타입 `LayoutMode`/`FlowAlign`/`FlowJustify` 문서화. "레이아웃 모드(flex) — Stage A" 섹션 신설: `resolveFlow` 동작·enum→CSS 매핑표·하위호환(필드 없음=absolute)·신뢰경계(gap sanitize·enum 폴백). frontmatter description/tags/timestamp 갱신.
+- `store/editor-store.md`: `setNodeLayout(id, partial)` 액션 추가(absolute 전환 시 `layout` 필드 삭제·flex 옵션 잔류·undo 태그 `layout:<id>:<keys>`). undo 태그 목록에 레이아웃 항목 추가. frontmatter description/tags/timestamp 갱신.
+- `export/export-format.md`: code.ts — flex 컨테이너의 `.pg-N-c` 래퍼 클래스·`flowDecls` 선언 목록·자식 없으면 래퍼 생략 문서화; flow 자식의 `baseDecls(inFlow=true)` — `position:relative; flex:0 0 auto`(`left`/`top` 대신) 추가. spec.ts — `flowSummary`(flexDirection/gap/정렬·교차 비기본값만 출력)·flow 자식 `@(x,y)` 생략(`inFlow=true`) 문서화. frontmatter description/tags/timestamp 갱신.
+- `index.md`: data-model 설명 줄에 레이아웃 모드(flex) 관련 타입 언급 추가.
+- **미구현(Stage B/C)**: grid 배치, 캔버스 flow 자식 드래그 재배치는 이번 Stage A에 포함되지 않음.
+
 ## 2026-06-29 (디자인 토큰 v2 — 문서 전역 글꼴·간격 토큰)
 
 - `data-model/page-node.md`: `PageDocument.meta.tokens?: DocumentTokens` 반영, `PageNode.background?`(색상 토큰 참조 허용)·`padding/margin?: Sides | string`(간격 토큰 참조) 타입 갱신, `toSides(v, tokens?)` 시그니처 갱신. 신규 "DocumentTokens — 문서 전역 디자인 토큰" 섹션(토큰 참조 모델 표·키 규칙·신뢰경계 sanitize 표). frontmatter tags/timestamp 갱신.

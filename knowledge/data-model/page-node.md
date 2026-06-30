@@ -1,10 +1,10 @@
 ---
 type: Reference
 title: 데이터 모델 — PageDocument / PageNode
-description: 저장 단위인 PageDocument와 노드 트리를 구성하는 PageNode, NodeFrame, Sides, DocumentTokens, NodeOverride, EventBinding 타입 정의. v2에서 글꼴·간격 토큰 추가.
+description: 저장 단위인 PageDocument와 노드 트리를 구성하는 PageNode, NodeFrame, Sides, DocumentTokens, NodeOverride, EventBinding 타입 정의. v2에서 글꼴·간격 토큰 추가. v3(Stage A)에서 레이아웃 모드(flex) 추가.
 resource: src/types/page.ts, src/types/events.ts, src/types/component.ts
-tags: [data-model, types, page, node, design-tokens]
-timestamp: 2026-06-29
+tags: [data-model, types, page, node, design-tokens, layout, flex]
+timestamp: 2026-06-30
 ---
 
 # 데이터 모델 — PageDocument / PageNode
@@ -60,12 +60,70 @@ interface PageNode {
   boxShadow?: ShadowSpec; // 픽셀 그림자 {x,y,blur,spread,color,opacity}; 없음=undefined
   padding?: Sides | string; // 내부 패딩. Sides(명시적) 또는 `token:<key>` 간격 토큰 참조(균일 적용)
   margin?: Sides | string;  // 외부 마진. Sides(명시적) 또는 `token:<key>` 간격 토큰 참조(균일 적용)
+  // --- 레이아웃 모드 (Stage A) ---
+  layout?: LayoutMode;          // 자식 배치 모드. 없음 = "absolute"(기존 전 문서 하위호환)
+  flexDirection?: "row" | "column"; // flex 방향. 기본 "row" (layout="flex"일 때만 유효)
+  gap?: number;                 // flex 자식 간격(px). 기본 0 (layout="flex"일 때만 유효)
+  alignItems?: FlowAlign;       // 교차축 정렬. 기본 "start" (layout="flex"일 때만 유효)
+  justifyContent?: FlowJustify; // 주축 배분. 기본 "start" (layout="flex"일 때만 유효)
   overrides?: Partial<Record<Exclude<BreakpointId, "desktop">, NodeOverride>>;
   events?: EventBinding[];
 }
 ```
 
 토큰 참조(`token:<key>`)는 dangling(토큰이 삭제·미정의)이면 해당 속성을 무시한다(background → 배경 없음, padding/margin → 0). 지어낸 값으로 fallback하지 않는다.
+
+## 레이아웃 모드 (flex) — Stage A
+
+### 타입 정의
+
+```ts
+type LayoutMode = "absolute" | "flex";
+type FlowAlign   = "start" | "center" | "end" | "stretch";   // 교차축
+type FlowJustify = "start" | "center" | "end" | "between";   // 주축
+```
+
+- `layout` 필드가 없거나 `"absolute"`면 기존처럼 자식을 `frame.x/y`로 절대 배치한다. **기존 문서를 그대로 열어도 동작한다(하위호환).**
+- `layout: "flex"`면 자식을 CSS flexbox로 흐름 배치한다. 자식의 `frame.x/y`는 무시되고 `frame.w/h`만 크기 힌트로 쓰인다.
+
+### resolveFlow — enum → CSS 매핑
+
+```ts
+interface ResolvedFlow {
+  flexDirection: "row" | "column";
+  flexWrap: "wrap";        // 항상 wrap 고정
+  gap: number;             // sanitizeSpacing(node.gap) — 유한 비음수 정수
+  alignItems: string;      // CSS 키워드
+  justifyContent: string;  // CSS 키워드
+}
+
+function resolveFlow(node: PageNode): ResolvedFlow | null
+// layout !== "flex"면 null(절대배치 유지)
+```
+
+enum → CSS 키워드 매핑표:
+
+| FlowAlign | CSS (alignItems) |
+|---|---|
+| start | flex-start |
+| center | center |
+| end | flex-end |
+| stretch | stretch |
+
+| FlowJustify | CSS (justifyContent) |
+|---|---|
+| start | flex-start |
+| center | center |
+| end | flex-end |
+| between | space-between |
+
+알 수 없는 enum 값(외부 JSON 등)은 `flex-start`로 폴백한다 — CSS 인젝션 불가.
+
+### 신뢰경계 (A03)
+
+- **gap**: `sanitizeSpacing(node.gap)`으로 유한 비음수 정수만 허용. NaN/무한/음수/비number → 0.
+- **enum 폴백**: `ALIGN_CSS[v] ?? "flex-start"`, `JUSTIFY_CSS[v] ?? "flex-start"` — 알 수 없는 enum 값이 CSS에 그대로 주입되지 않는다.
+- `flexWrap`은 코드에서 `"wrap"` 리터럴로 고정(사용자 입력 경로 없음).
 
 ## ShadowSpec — 픽셀 그림자
 
