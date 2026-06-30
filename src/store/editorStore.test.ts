@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { getBlockDef, getComponentDef, listBlocks } from "../registry";
 import { makeSpacingTokenRef, resolveFrame, resolveHidden } from "../types/page";
 import { findParentChild, useEditorStore } from "./editorStore";
-import { resolvePadding, resolveMargin } from "../types/page";
 
 const store = () => useEditorStore.getState();
 

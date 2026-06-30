@@ -520,7 +520,7 @@ describe("color token export", () => {
   });
 
   it("a dangling ref (deleted token) drops the background, not the node", () => {
-    const { document, child } = tokenDoc();
+    const { child } = tokenDoc();
     useEditorStore.getState().removeColorToken("brand");
     const d = useEditorStore.getState().document!;
     const code = generateCode(d);
