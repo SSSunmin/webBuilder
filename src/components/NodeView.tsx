@@ -14,6 +14,7 @@ import {
   resolveColor,
   resolveFlow,
   resolveFrame,
+  resolveGrid,
   resolveHidden,
   resolveMargin,
   resolvePadding,
@@ -23,10 +24,17 @@ import {
 
 /** Recursively renders a node and its subtree on the canvas with absolute
  * positioning, wired for selection, drag-to-move, drop (containers), resize.
- * `inFlow` = the parent is a flex container, so this node flows (relative,
- * fixed size) instead of being absolutely positioned, and can't be drag-moved
- * (reorder it from the layer tree instead). */
-export function NodeView({ nodeId, inFlow = false }: { nodeId: string; inFlow?: boolean }) {
+ * `inFlow`/`inGrid` = the parent lays this node out in normal flow, so this
+ * node is relative/fixed-size instead of absolutely positioned. */
+export function NodeView({
+  nodeId,
+  inFlow = false,
+  inGrid = false,
+}: {
+  nodeId: string;
+  inFlow?: boolean;
+  inGrid?: boolean;
+}) {
   const node = useEditorStore((s) => s.document?.nodes[nodeId]);
   // Resolve a token-referencing background to its literal color, selecting the
   // computed string so the canvas re-renders live when the token value changes.
@@ -58,7 +66,7 @@ export function NodeView({ nodeId, inFlow = false }: { nodeId: string; inFlow?: 
     disabled: !container && !inFlow,
   });
   const { setNodeRef: dragRef, listeners, attributes, transform, isDragging } =
-    useDraggable({ id: `drag:${nodeId}`, data: { nodeId }, disabled: isRoot });
+    useDraggable({ id: `drag:${nodeId}`, data: { nodeId }, disabled: isRoot || inGrid });
 
   // Live insertion indicator when another flow child is being dragged over this one.
   const drop = useSyncExternalStore(flowDropStore.subscribe, flowDropStore.get, () => null);
@@ -83,29 +91,48 @@ export function NodeView({ nodeId, inFlow = false }: { nodeId: string; inFlow?: 
   // A flex container flows its children: wrap them so they reflow (wrap) when the
   // container narrows, and tell each child it's in-flow (relative, no drag).
   const flow = container ? resolveFlow(node) : null;
+  const grid = container ? resolveGrid(node) : null;
   const childEls = container
-    ? node.children.map((cid) => <NodeView key={cid} nodeId={cid} inFlow={Boolean(flow)} />)
+    ? node.children.map((cid) => (
+        <NodeView key={cid} nodeId={cid} inFlow={Boolean(flow)} inGrid={Boolean(grid)} />
+      ))
     : undefined;
   // Wrap only when there are children, so an empty flex container has the same
   // structure as the code export (which skips the wrapper when empty).
-  const childContent = flow && childEls && childEls.length ? (
-    <div
-      className="h-full w-full"
-      style={{
-        display: "flex",
-        boxSizing: "border-box",
-        flexDirection: flow.flexDirection,
-        flexWrap: flow.flexWrap,
-        gap: flow.gap,
-        alignItems: flow.alignItems,
-        justifyContent: flow.justifyContent,
-      }}
-    >
-      {childEls}
-    </div>
-  ) : (
-    childEls
-  );
+  const childContent =
+    flow && childEls && childEls.length ? (
+      <div
+        className="h-full w-full"
+        style={{
+          display: "flex",
+          boxSizing: "border-box",
+          flexDirection: flow.flexDirection,
+          flexWrap: flow.flexWrap,
+          gap: flow.gap,
+          alignItems: flow.alignItems,
+          justifyContent: flow.justifyContent,
+        }}
+      >
+        {childEls}
+      </div>
+    ) : grid && childEls && childEls.length ? (
+      <div
+        className="h-full w-full"
+        style={{
+          display: "grid",
+          boxSizing: "border-box",
+          gridTemplateColumns: grid.gridTemplateColumns,
+          ...(grid.gridTemplateRows ? { gridTemplateRows: grid.gridTemplateRows } : {}),
+          gap: grid.gap,
+          alignItems: grid.alignItems,
+          justifyContent: grid.justifyContent,
+        }}
+      >
+        {childEls}
+      </div>
+    ) : (
+      childEls
+    );
 
   const startResize = (e: ReactPointerEvent) => {
     e.stopPropagation();
@@ -165,7 +192,17 @@ export function NodeView({ nodeId, inFlow = false }: { nodeId: string; inFlow?: 
         // Base font applied at the root so all nodes inherit it (mirrors export).
         fontFamily: documentFontFamily(tokens),
       }
-    : inFlow
+    : inGrid
+      ? {
+          position: "relative",
+          width: frame.w,
+          height: frame.h,
+          background,
+          borderRadius: node.borderRadius,
+          boxShadow,
+          zIndex: selected ? 10 : undefined,
+        }
+      : inFlow
       ? {
           // Flex item: flow normally, keep its fixed size, don't grow/shrink.
           position: "relative",

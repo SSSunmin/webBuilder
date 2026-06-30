@@ -1092,6 +1092,87 @@ describe("flex layout (layout='flex')", () => {
   });
 });
 
+describe("grid layout (layout='grid')", () => {
+  function buildGrid(opts: Parameters<ReturnType<typeof useEditorStore.getState>["setNodeLayout"]>[1]) {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Grid Page");
+    const child = useEditorStore.getState().addNode(doc.rootId, "Card")!;
+    useEditorStore.getState().setNodeLayout(doc.rootId, { layout: "grid", ...opts });
+    return { rootId: doc.rootId, child };
+  }
+
+  it("emits a grid wrapper rule and flows children (relative, not absolute)", () => {
+    buildGrid({ gridColumns: 3, gridRows: 2, gap: 8, justifyContent: "center", alignItems: "end" });
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain(".pg-0-c {");
+    expect(code).toContain("display: grid");
+    expect(code).toContain("grid-template-columns: repeat(3, minmax(0, 1fr))");
+    expect(code).toContain("grid-template-rows: repeat(2, minmax(0, 1fr))");
+    expect(code).toContain("gap: 8px");
+    expect(code).toContain("justify-content: center");
+    expect(code).toContain("align-items: flex-end");
+    expect(code).toContain('<div className="pg-0-c">');
+    expect(code).not.toContain("flex: 0 0 auto");
+    expect(code).toMatch(/\.pg-1 \{[^}]*position: relative/);
+    expect(code).not.toMatch(/\.pg-1 \{[^}]*position: absolute/);
+  });
+
+  it("sanitizes abnormal grid count and alignment values in generated CSS", () => {
+    buildGrid({
+      gridColumns: "3); } body {" as never,
+      alignItems: "bad; }" as never,
+      justifyContent: "x" as never,
+    });
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain("grid-template-columns: repeat(1, minmax(0, 1fr))");
+    expect(code).toContain("align-items: stretch");
+    expect(code).toContain("justify-content: flex-start");
+    expect(code).not.toContain("body {");
+    expect(code).not.toContain("bad; }");
+  });
+
+  it("keeps existing absolute and flex export behavior unchanged", () => {
+    const store = useEditorStore.getState();
+    let doc = store.newDocument("Abs Regression");
+    useEditorStore.getState().addNode(doc.rootId, "Card");
+    let code = generateCode(useEditorStore.getState().document!);
+    expect(code).not.toContain("display: grid");
+    expect(code).toMatch(/\.pg-1 \{[^}]*position: absolute/);
+
+    doc = store.newDocument("Flex Regression");
+    useEditorStore.getState().addNode(doc.rootId, "Card");
+    useEditorStore.getState().setNodeLayout(doc.rootId, { layout: "flex", gap: 4 });
+    code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain("display: flex");
+    expect(code).toContain("gap: 4px");
+  });
+
+  it("spec shows the grid layout and drops x/y for grid children", () => {
+    buildGrid({ gridColumns: 3, gap: 8, justifyContent: "between" });
+    const spec = generateSpec(useEditorStore.getState().document!);
+    expect(spec).toContain("grid 3열");
+    expect(spec).toContain("gap 8");
+    expect(spec).toContain("space-between");
+    expect(spec).toMatch(/\*\*Card\*\* \(container\) — \d+×\d+/);
+    expect(spec).not.toMatch(/\*\*Card\*\* \(container\) — @\(/);
+  });
+
+  it("keeps flex spec summary unchanged", () => {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Flex Spec Regression");
+    useEditorStore.getState().addNode(doc.rootId, "Card");
+    useEditorStore.getState().setNodeLayout(doc.rootId, {
+      layout: "flex",
+      flexDirection: "column",
+      gap: 8,
+    });
+    const spec = generateSpec(useEditorStore.getState().document!);
+    expect(spec).toContain("flex 세로");
+    expect(spec).toContain("gap 8");
+    expect(spec).not.toContain("grid");
+  });
+});
+
 describe("flex child order (Stage B reorder)", () => {
   it("exports flex children in their children-array order; a reorder is reflected", () => {
     const store = useEditorStore.getState();

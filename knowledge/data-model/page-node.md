@@ -1,9 +1,9 @@
 ---
 type: Reference
 title: 데이터 모델 — PageDocument / PageNode
-description: 저장 단위인 PageDocument와 노드 트리를 구성하는 PageNode, NodeFrame, Sides, DocumentTokens, NodeOverride, EventBinding 타입 정의. v2에서 글꼴·간격 토큰 추가. v3(Stage A)에서 레이아웃 모드(flex) 추가. v4(Stage B1)에서 NodeOverride에 padding/margin 추가 및 resolvePadding/resolveMargin 신규. v5(Stage B2)에서 NodeOverride에 background 추가 및 resolveBackground 신규.
+description: 저장 단위인 PageDocument와 노드 트리를 구성하는 PageNode, NodeFrame, Sides, DocumentTokens, NodeOverride, EventBinding 타입 정의. v2에서 글꼴·간격 토큰 추가. v3(Stage A)에서 레이아웃 모드(flex) 추가. v4(Stage B1)에서 NodeOverride에 padding/margin 추가 및 resolvePadding/resolveMargin 신규. v5(Stage B2)에서 NodeOverride에 background 추가 및 resolveBackground 신규. v6(Stage C-1)에서 LayoutMode에 "grid" 추가, PageNode에 gridColumns/gridRows 신규, gap/alignItems/justifyContent가 flex·grid 공유 필드로 확장, ResolvedGrid 인터페이스 및 resolveGrid 신규.
 resource: src/types/page.ts, src/types/events.ts, src/types/component.ts
-tags: [data-model, types, page, node, design-tokens, layout, flex, breakpoint, override, spacing, background]
+tags: [data-model, types, page, node, design-tokens, layout, flex, grid, breakpoint, override, spacing, background]
 timestamp: 2026-06-30
 ---
 
@@ -60,12 +60,14 @@ interface PageNode {
   boxShadow?: ShadowSpec; // 픽셀 그림자 {x,y,blur,spread,color,opacity}; 없음=undefined
   padding?: Sides | string; // 내부 패딩. Sides(명시적) 또는 `token:<key>` 간격 토큰 참조(균일 적용)
   margin?: Sides | string;  // 외부 마진. Sides(명시적) 또는 `token:<key>` 간격 토큰 참조(균일 적용)
-  // --- 레이아웃 모드 (Stage A) ---
-  layout?: LayoutMode;          // 자식 배치 모드. 없음 = "absolute"(기존 전 문서 하위호환)
+  // --- 레이아웃 모드 (Stage A+C-1) ---
+  layout?: LayoutMode;              // 자식 배치 모드. 없음 = "absolute"(기존 전 문서 하위호환)
   flexDirection?: "row" | "column"; // flex 방향. 기본 "row" (layout="flex"일 때만 유효)
-  gap?: number;                 // flex 자식 간격(px). 기본 0 (layout="flex"일 때만 유효)
-  alignItems?: FlowAlign;       // 교차축 정렬. 기본 "start" (layout="flex"일 때만 유효)
-  justifyContent?: FlowJustify; // 주축 배분. 기본 "start" (layout="flex"일 때만 유효)
+  gridColumns?: number;             // grid 열 수. 기본 1 (layout="grid"일 때만 유효)
+  gridRows?: number;                // grid 행 수. 없음/0 → auto rows (layout="grid"일 때만 유효)
+  gap?: number;                     // flex/grid 자식 간격(px). 기본 0 (flex·grid 공유)
+  alignItems?: FlowAlign;           // 교차축 정렬. 기본 "start"(flex) / "stretch"(grid) (flex·grid 공유)
+  justifyContent?: FlowJustify;     // 주축 배분. 기본 "start" (flex·grid 공유)
   overrides?: Partial<Record<Exclude<BreakpointId, "desktop">, NodeOverride>>;
   events?: EventBinding[];
 }
@@ -78,7 +80,7 @@ interface PageNode {
 ### 타입 정의
 
 ```ts
-type LayoutMode = "absolute" | "flex";
+type LayoutMode = "absolute" | "flex" | "grid";  // "grid" 추가 — Stage C-1
 type FlowAlign   = "start" | "center" | "end" | "stretch";   // 교차축
 type FlowJustify = "start" | "center" | "end" | "between";   // 주축
 ```
@@ -124,6 +126,58 @@ enum → CSS 키워드 매핑표:
 - **gap**: `sanitizeSpacing(node.gap)`으로 유한 비음수 정수만 허용. NaN/무한/음수/비number → 0.
 - **enum 폴백**: `ALIGN_CSS[v] ?? "flex-start"`, `JUSTIFY_CSS[v] ?? "flex-start"` — 알 수 없는 enum 값이 CSS에 그대로 주입되지 않는다.
 - `flexWrap`은 코드에서 `"wrap"` 리터럴로 고정(사용자 입력 경로 없음).
+
+## 레이아웃 모드 (grid) — Stage C-1
+
+### 신규 PageNode 필드
+
+| 필드 | 타입 | 기본값 | 비고 |
+|---|---|---|---|
+| `gridColumns` | `number?` | 1 | `repeat(N, minmax(0,1fr))` 열 수; `layout="grid"`일 때만 유효 |
+| `gridRows` | `number?` | auto | 없음/0 → 행 자동(auto rows); `layout="grid"`일 때만 유효 |
+
+- `gap` / `alignItems` / `justifyContent`는 flex와 **공유 필드**다. grid일 때 alignItems 기본값은 `"stretch"`, justifyContent 기본값은 `"start"`.
+
+### ResolvedGrid — enum → CSS 매핑
+
+```ts
+interface ResolvedGrid {
+  columns: number;               // 정수 강제 열 수 (Math.max(1, …))
+  gridTemplateColumns: string;   // "repeat(N, minmax(0, 1fr))"
+  gridTemplateRows: string | null; // rows > 0 이면 "repeat(N, minmax(0, 1fr))", 아니면 null
+  gap: number;                   // sanitizeSpacing(node.gap) — 유한 비음수 정수
+  alignItems: string;            // CSS 키워드 (ALIGN_CSS 매핑, 폴백 "stretch")
+  justifyContent: string;        // CSS 키워드 (JUSTIFY_CSS 매핑, 폴백 "flex-start")
+}
+
+function resolveGrid(node: PageNode): ResolvedGrid | null
+// layout !== "grid"면 null
+```
+
+enum → CSS 매핑은 flex와 동일한 `ALIGN_CSS` / `JUSTIFY_CSS` 상수를 재사용한다. 기본 폴백만 다르다:
+
+| | flex 폴백 | grid 폴백 |
+|---|---|---|
+| alignItems | `"flex-start"` | `"stretch"` |
+| justifyContent | `"flex-start"` | `"flex-start"` |
+
+### gridTemplateRows 결정 로직
+
+```
+rows = sanitizeSpacing(node.gridRows)   // null이면 0으로 취급
+gridTemplateRows = rows && rows > 0
+  ? "repeat(rows, minmax(0, 1fr))"
+  : null                                // null → CSS 속성 자체를 생략(auto rows)
+```
+
+### resolveFlow는 grid에서 null 반환 (불변 조건)
+
+`resolveFlow(node)`는 `node.layout !== "flex"`면 항상 `null`을 반환한다. grid 컨테이너에 대해 호출해도 null이므로, `flowReorder.resolveFlowDrag`는 grid 자식에 절대 적용되지 않는다. grid 자식의 캔버스 드래그 재배치는 이번 Stage C-1에서 구현하지 않으며, `resolveFlow` null 보장이 그 경계다.
+
+### 신뢰경계 (A03)
+
+- **gridColumns/gridRows**: `sanitizeSpacing(node.gridColumns) ?? 1` → `Math.max(1, …)` — 유한 비음수 정수로만 `repeat(N, …)` 생성. NaN/무한/음수 → 최소 1열.
+- **enum 폴백**: `ALIGN_CSS` / `JUSTIFY_CSS` 동일 맵 재사용 — 알 수 없는 값이 CSS에 주입되지 않는다.
 
 ## ShadowSpec — 픽셀 그림자
 

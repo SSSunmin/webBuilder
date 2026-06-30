@@ -8,6 +8,7 @@ import {
   resolveColor,
   resolveFlow,
   resolveFrame,
+  resolveGrid,
   resolveHidden,
   spacingTokenKey,
   toSides,
@@ -122,6 +123,17 @@ function flowSummary(node: PageNode): string | null {
   return parts.join(", ");
 }
 
+function gridSummary(node: PageNode): string | null {
+  const grid = resolveGrid(node);
+  if (!grid) return null;
+  const cols = grid.columns;
+  const parts = [`grid ${cols}열`];
+  if (grid.gap) parts.push(`gap ${grid.gap}`);
+  if (grid.justifyContent !== "flex-start") parts.push(`정렬 ${grid.justifyContent}`);
+  if (grid.alignItems !== "stretch") parts.push(`교차 ${grid.alignItems}`);
+  return parts.join(", ");
+}
+
 /** Position/size summary. A node whose parent flows (inFlow) has no meaningful
  * x/y, so only its size is shown. */
 function frameSummary(
@@ -136,6 +148,8 @@ function frameSummary(
   const parts = [node.background ? `${pos}, ${bgSummary(node.background, tokens)}` : pos];
   const flow = flowSummary(node);
   if (flow) parts.push(flow);
+  const grid = gridSummary(node);
+  if (grid) parts.push(grid);
   if (node.borderRadius) parts.push(`radius ${node.borderRadius}`);
   if (node.boxShadow) {
     const sh = node.boxShadow;
@@ -174,7 +188,7 @@ function renderNode(
   )}${summary ? ` — ${summary}` : ""}`;
   const lines = [line, ...overrideLines(node, depth, doc.meta.tokens), ...eventLines(node, depth)];
   // Children of a flex container flow, so they report size only (no x/y).
-  const childInFlow = Boolean(def?.isContainer && resolveFlow(node));
+  const childInFlow = Boolean(def?.isContainer && (resolveFlow(node) || resolveGrid(node)));
   for (const childId of node.children) {
     lines.push(...renderNode(doc, childId, depth + 1, false, visited, childInFlow));
   }

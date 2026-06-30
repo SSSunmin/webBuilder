@@ -2,6 +2,12 @@
 
 OKF 번들의 변경 이력. 최신 항목이 위. `/okf` 실행 시 knowledge-curator가 여기에 기록한다.
 
+## 2026-06-30 (#4 Stage C-1 — grid 컨테이너 레이아웃 모드)
+
+- `data-model/page-node.md`: frontmatter description/tags에 v6(Stage C-1) grid 반영. `LayoutMode` 유니온에 `"grid"` 추가. `PageNode` 필드 주석에 `gridColumns`/`gridRows` 신규 및 `gap`/`alignItems`/`justifyContent`의 flex·grid 공유 명시. "레이아웃 모드 (grid) — Stage C-1" 섹션 신설: 신규 필드 표, `ResolvedGrid` 인터페이스·`resolveGrid` 시그니처, gridTemplateRows 결정 로직, flex/grid 폴백 차이표, `resolveFlow`-stays-null 불변 조건, A03 신뢰경계(정수 강제·enum 폴백).
+- `architecture/editor-architecture.md`: frontmatter description/tags 갱신. `NodeView.tsx` 섹션에 `useDraggable disabled: isRoot || inGrid` 조건 추가. "grid 자식은 캔버스 reorder 불가(Stage C-1 불변 조건)" 노트 신설 — `resolveFlow` null 보장으로 `resolveFlowDrag`가 grid 자식에 절대 적용되지 않음 설명.
+- `index.md`: data-model 설명 줄에 grid/resolveGrid 언급 추가.
+
 ## 2026-06-30 (#4 Stage B — flex 자식 캔버스 드래그 순서변경)
 
 - `architecture/editor-architecture.md`: `onDragOver` 섹션 신설(flowDropStore 갱신 역할), `onDragEnd`에 flex 자식 분기(reorder→`moveNodeAdjacent`/reparent→`moveNode`) 추가, "flex 자식 캔버스 DnD — Stage B" 섹션 신설(`resolveFlowDrag` 순수 함수·반환 케이스표·`flowDropStore` 삽입 인디케이터·`NodeView` 활성화 조건·export 자동 반영). frontmatter resource/tags/timestamp 갱신. 신규 의존성 0.

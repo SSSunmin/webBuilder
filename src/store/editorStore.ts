@@ -115,7 +115,16 @@ interface EditorState {
   setNodeLayout: (
     id: string,
     partial: Partial<
-      Pick<PageNode, "layout" | "flexDirection" | "gap" | "alignItems" | "justifyContent">
+      Pick<
+        PageNode,
+        | "layout"
+        | "flexDirection"
+        | "gridColumns"
+        | "gridRows"
+        | "gap"
+        | "alignItems"
+        | "justifyContent"
+      >
     >,
   ) => void;
   /** Upsert a document-level color token. Invalid keys are ignored. */
@@ -522,8 +531,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
         (node) => {
           const next: PageNode = { ...node, ...partial };
           // Canonical absolute = no layout field (matches pre-flex documents).
-          // Flex-only options are kept so toggling back restores the prior setup.
-          if (next.layout !== "flex") delete next.layout;
+          // Flex/grid options are kept so toggling back restores the prior setup.
+          if (next.layout !== "flex" && next.layout !== "grid") delete next.layout;
           return next;
         },
         // Coalesce edits to the same control (e.g. dragging the gap number),

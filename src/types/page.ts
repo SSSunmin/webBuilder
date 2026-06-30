@@ -110,8 +110,8 @@ export interface NodeOverride {
 
 /** How a container arranges its children. Absent/"absolute" (the default and the
  * shape of every pre-flex document) positions children by their frame.x/y.
- * "flex" lays children out in normal flow (CSS flexbox); their x/y are ignored. */
-export type LayoutMode = "absolute" | "flex";
+ * "flex"/"grid" lay children out in normal flow; their x/y are ignored. */
+export type LayoutMode = "absolute" | "flex" | "grid";
 /** Flex cross-axis alignment of children. */
 export type FlowAlign = "start" | "center" | "end" | "stretch";
 /** Flex main-axis distribution of children. */
@@ -138,15 +138,20 @@ export interface PageNode {
    * reference applied uniformly. Siblings keep this gap when snapping. */
   margin?: Sides | string;
   /** Container layout mode for this node's children. Absent = "absolute"
-   * (children placed by frame.x/y). "flex" flows children (see resolveFlow). */
+   * (children placed by frame.x/y). "flex" flows children (see resolveFlow);
+   * "grid" auto-places children (see resolveGrid). */
   layout?: LayoutMode;
   /** Flex main-axis direction (layout="flex" only). Default "row". */
   flexDirection?: "row" | "column";
-  /** Gap between flex children, px (layout="flex" only). Default 0. */
+  /** Grid column count (layout="grid" only). Default 1. */
+  gridColumns?: number;
+  /** Grid row count (layout="grid" only). Default auto rows. */
+  gridRows?: number;
+  /** Gap between flex/grid children, px. Default 0. */
   gap?: number;
-  /** Flex cross-axis alignment (layout="flex" only). Default "start". */
+  /** Flex/grid cross-axis alignment. Default "start" for flex, "stretch" for grid. */
   alignItems?: FlowAlign;
-  /** Flex main-axis distribution (layout="flex" only). Default "start". */
+  /** Flex/grid main-axis distribution. Default "start". */
   justifyContent?: FlowJustify;
   /** Per-breakpoint overrides; desktop is the base frame (no override). */
   overrides?: Partial<Record<Exclude<BreakpointId, "desktop">, NodeOverride>>;
@@ -401,6 +406,30 @@ export function resolveFlow(node: PageNode): ResolvedFlow | null {
     flexWrap: "wrap",
     gap: sanitizeSpacing(node.gap) ?? 0,
     alignItems: ALIGN_CSS[node.alignItems as FlowAlign] ?? "flex-start",
+    justifyContent: JUSTIFY_CSS[node.justifyContent as FlowJustify] ?? "flex-start",
+  };
+}
+
+export interface ResolvedGrid {
+  columns: number;
+  gridTemplateColumns: string;
+  gridTemplateRows: string | null;
+  gap: number;
+  alignItems: string;
+  justifyContent: string;
+}
+
+export function resolveGrid(node: PageNode): ResolvedGrid | null {
+  if (node.layout !== "grid") return null;
+  // why: counts are coerced to integers (>=1), so `repeat(N, ...)` can't inject (A03).
+  const cols = Math.max(1, sanitizeSpacing(node.gridColumns) ?? 1);
+  const rows = sanitizeSpacing(node.gridRows);
+  return {
+    columns: cols,
+    gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+    gridTemplateRows: rows && rows > 0 ? `repeat(${rows}, minmax(0, 1fr))` : null,
+    gap: sanitizeSpacing(node.gap) ?? 0,
+    alignItems: ALIGN_CSS[node.alignItems as FlowAlign] ?? "stretch",
     justifyContent: JUSTIFY_CSS[node.justifyContent as FlowJustify] ?? "flex-start",
   };
 }

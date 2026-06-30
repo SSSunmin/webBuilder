@@ -5,6 +5,7 @@ import type {
   PageDocument,
   PageNode,
   ResolvedFlow,
+  ResolvedGrid,
   Sides,
 } from "../types/page";
 import {
@@ -15,6 +16,7 @@ import {
   isColorTokenRef,
   isSpacingTokenRef,
   resolveFlow,
+  resolveGrid,
   sanitizeColor,
   sanitizeFontFamily,
   sanitizeSpacing,
@@ -85,6 +87,20 @@ function flowDecls(flow: ResolvedFlow): string[] {
   return parts;
 }
 
+function gridDecls(grid: ResolvedGrid): string[] {
+  const parts = [
+    "display: grid",
+    `grid-template-columns: ${grid.gridTemplateColumns}`,
+    "width: 100%",
+    "height: 100%",
+    "box-sizing: border-box",
+  ];
+  if (grid.gridTemplateRows) parts.push(`grid-template-rows: ${grid.gridTemplateRows}`);
+  if (grid.gap) parts.push(`gap: ${grid.gap}px`);
+  parts.push(`align-items: ${grid.alignItems}`, `justify-content: ${grid.justifyContent}`);
+  return parts;
+}
+
 /** Base (desktop) CSS declarations for a node's frame + box styling. `inFlow` =
  * the parent is a flex container, so this node flows (relative, fixed size)
  * instead of being absolutely positioned. */
@@ -93,11 +109,14 @@ function baseDecls(
   isRoot: boolean,
   tokens: DocumentTokens | undefined,
   inFlow: boolean,
+  inGrid: boolean,
 ): string[] {
   const f = node.frame;
   const parts = isRoot
     ? ["position: relative", `width: ${f.w}px`, `height: ${f.h}px`, "margin: 0 auto"]
-    : inFlow
+    : inGrid
+      ? ["position: relative", `width: ${f.w}px`, `height: ${f.h}px`]
+      : inFlow
       ? ["position: relative", `width: ${f.w}px`, `height: ${f.h}px`, "flex: 0 0 auto"]
       : [
           "position: absolute",
@@ -220,8 +239,9 @@ function pushRules(
   isRoot: boolean,
   tokens: DocumentTokens | undefined,
   inFlow: boolean,
+  inGrid: boolean,
 ): void {
-  acc.base.push(`.${cls} { ${baseDecls(node, isRoot, tokens, inFlow).join("; ")}; }`);
+  acc.base.push(`.${cls} { ${baseDecls(node, isRoot, tokens, inFlow, inGrid).join("; ")}; }`);
   const t = overrideDecls(node, "tablet", tokens);
   if (t.length) acc.tablet.push(`.${cls} { ${t.join("; ")}; }`);
   const m = overrideDecls(node, "mobile", tokens);
@@ -306,6 +326,7 @@ function renderNode(
   acc: CssAccum,
   visited: Set<string> = new Set(),
   inFlow = false,
+  inGrid = false,
 ): string {
   // Guard against corrupted documents with cyclic children references.
   if (visited.has(nodeId)) return "";
@@ -314,19 +335,20 @@ function renderNode(
   visited.add(nodeId);
 
   const cls = `pg-${acc.n++}`;
-  pushRules(acc, cls, node, isRoot, doc.meta.tokens, inFlow);
+  pushRules(acc, cls, node, isRoot, doc.meta.tokens, inFlow, inGrid);
 
   const def = getComponentDef(node.type);
   const isContainer = def?.isContainer ?? true;
   // A flex container flows its children (relative, wrapping) instead of placing
   // them absolutely — mirrors the canvas (NodeView).
   const flow = isContainer ? resolveFlow(node) : null;
+  const grid = isContainer ? resolveGrid(node) : null;
   // Unknown type (imported JSON / swapped registry): keep the node and its
   // subtree with a placeholder comment instead of silently dropping them.
   // Treat unknown as a possible container so children are never lost.
   const childCodes = isContainer
     ? node.children
-        .map((cid) => renderNode(doc, cid, false, acc, visited, Boolean(flow)))
+        .map((cid) => renderNode(doc, cid, false, acc, visited, Boolean(flow), Boolean(grid)))
         .filter(Boolean)
     : [];
   let childrenBlock = childCodes.join("\n");
@@ -335,6 +357,10 @@ function renderNode(
   if (flow && childrenBlock) {
     const fcls = `${cls}-c`;
     acc.base.push(`.${fcls} { ${flowDecls(flow).join("; ")}; }`);
+    childrenBlock = `<div className="${fcls}">\n${indentBlock(childrenBlock, 2)}\n</div>`;
+  } else if (grid && childrenBlock) {
+    const fcls = `${cls}-c`;
+    acc.base.push(`.${fcls} { ${gridDecls(grid).join("; ")}; }`);
     childrenBlock = `<div className="${fcls}">\n${indentBlock(childrenBlock, 2)}\n</div>`;
   }
   const inner = def
