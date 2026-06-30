@@ -838,6 +838,203 @@ describe("B1: per-breakpoint padding/margin overrides (spec export)", () => {
   });
 });
 
+describe("B2: per-breakpoint background overrides (code export)", () => {
+  /** Build a doc with a Card child whose overrides are set via raw object. */
+  function codeWithBgOverrides(
+    overrides: PageNode["overrides"],
+    baseBg?: string,
+  ) {
+    const { document, childId } = buildDoc();
+    const doc = {
+      ...document,
+      nodes: {
+        ...document.nodes,
+        [childId]: {
+          ...document.nodes[childId],
+          ...(baseBg !== undefined ? { background: baseBg } : {}),
+          overrides,
+        },
+      },
+    };
+    return generateCode(doc);
+  }
+
+  // tablet background override → @media (max-width: 768px) 블록에 background: 규칙
+  it("tablet background override emits a background rule inside @media (max-width: 768px)", () => {
+    const code = codeWithBgOverrides({ tablet: { background: "#0000ff" } });
+    expect(code).toContain("@media (max-width: 768px)");
+    expect(code).toContain("background: #0000ff");
+  });
+
+  // mobile background override → @media (max-width: 375px) 블록에 background: 규칙
+  it("mobile background override emits a background rule inside @media (max-width: 375px)", () => {
+    const code = codeWithBgOverrides({ mobile: { background: "#00ff00" } });
+    expect(code).toContain("@media (max-width: 375px)");
+    expect(code).toContain("background: #00ff00");
+  });
+
+  // dangling 토큰 override (존재하지 않는 토큰 ref) → background: transparent emit (base를 이김)
+  it("dangling color-token override emits 'background: transparent' (beats base, safe fallback)", () => {
+    const { document, childId } = buildDoc();
+    const doc = {
+      ...document,
+      nodes: {
+        ...document.nodes,
+        [childId]: {
+          ...document.nodes[childId],
+          background: "#ffffff", // base
+          // token "gone"은 tokens에 정의되지 않음 → dangling
+          overrides: { tablet: { background: makeColorTokenRef("gone") } },
+        },
+      },
+    };
+    const code = generateCode(doc);
+    expect(code).toContain("@media (max-width: 768px)");
+    // transparent로 대체 — base의 #ffffff를 이겨야 함
+    expect(code).toContain("background: transparent");
+    // dangling ref의 var()는 절대 출력되면 안 됨
+    expect(code).not.toContain("var(--color-gone)");
+  });
+
+  // unsafe 리터럴 override → background: transparent로 대체, 위험 문자열이 CSS에 안 나감 (A03)
+  it("unsafe literal background override emits 'background: transparent', never the raw string (A03)", () => {
+    const unsafe = "red; } body{";
+    const code = codeWithBgOverrides(
+      { tablet: { background: unsafe } },
+      "#ffffff",
+    );
+    expect(code).toContain("@media (max-width: 768px)");
+    expect(code).toContain("background: transparent");
+    // 위험 문자열이 CSS에 나타나면 안 됨
+    expect(code).not.toContain("} body{");
+    expect(code).not.toContain("red; }");
+  });
+
+  // 유효 토큰 override → background: var(--color-<key>)
+  it("valid color-token override emits 'background: var(--color-<key>)' in the media block", () => {
+    const { document, childId } = buildDoc();
+    useEditorStore.getState().setColorToken("brand", "#3b82f6");
+    const doc = {
+      ...document,
+      nodes: {
+        ...document.nodes,
+        [childId]: {
+          ...document.nodes[childId],
+          overrides: { tablet: { background: makeColorTokenRef("brand") } },
+        },
+      },
+      meta: {
+        ...document.meta,
+        tokens: { ...document.meta.tokens, colors: { brand: "#3b82f6" } },
+      },
+    };
+    const code = generateCode(doc);
+    expect(code).toContain("@media (max-width: 768px)");
+    expect(code).toContain("background: var(--color-brand)");
+  });
+
+  // tablet + mobile 양쪽 background override → 두 미디어블록 모두 emit, tablet이 먼저
+  it("both tablet and mobile background overrides emit in their respective media blocks", () => {
+    const code = codeWithBgOverrides({
+      tablet: { background: "#111111" },
+      mobile: { background: "#222222" },
+    });
+    expect(code).toContain("@media (max-width: 768px)");
+    expect(code).toContain("@media (max-width: 375px)");
+    expect(code.indexOf("max-width: 768px")).toBeLessThan(
+      code.indexOf("max-width: 375px"),
+    );
+  });
+
+  // 회귀: 기존 frame/hidden/padding override emit 불변
+  it("regression: frame and hidden overrides still emit correctly alongside background", () => {
+    const code = codeWithBgOverrides({
+      tablet: { frame: { x: 10, w: 200 }, background: "#aabbcc" },
+      mobile: { hidden: true },
+    });
+    expect(code).toContain("left: 10px");
+    expect(code).toContain("width: 200px");
+    expect(code).toContain("background: #aabbcc");
+    expect(code).toContain("display: none");
+  });
+});
+
+describe("B2: per-breakpoint background overrides (spec export)", () => {
+  function specWithBgOverrides(overrides: PageNode["overrides"], baseBg?: string) {
+    const { document, childId } = buildDoc();
+    const doc = {
+      ...document,
+      nodes: {
+        ...document.nodes,
+        [childId]: {
+          ...document.nodes[childId],
+          ...(baseBg !== undefined ? { background: baseBg } : {}),
+          overrides,
+        },
+      },
+    };
+    return generateSpec(doc);
+  }
+
+  // tablet background override → 스펙에 `태블릿: ... bg ...` 라인 (bgSummary 형식)
+  it("tablet background override appears as '태블릿: ... bg ...' in spec", () => {
+    const spec = specWithBgOverrides({ tablet: { background: "#0000ff" } });
+    expect(spec).toContain("태블릿:");
+    expect(spec).toMatch(/태블릿:.*bg #0000ff/);
+  });
+
+  // mobile background override → `모바일: ... bg ...` 라인
+  it("mobile background override appears as '모바일: ... bg ...' in spec", () => {
+    const spec = specWithBgOverrides({ mobile: { background: "#00ff00" } });
+    expect(spec).toContain("모바일:");
+    expect(spec).toMatch(/모바일:.*bg #00ff00/);
+  });
+
+  // token ref override → bgSummary 형식 "bg token <key> (<resolved>)"
+  it("color-token background override appears as 'bg token <key>' in spec", () => {
+    const { document, childId } = buildDoc();
+    const doc = {
+      ...document,
+      nodes: {
+        ...document.nodes,
+        [childId]: {
+          ...document.nodes[childId],
+          overrides: { tablet: { background: makeColorTokenRef("brand") } },
+        },
+      },
+      meta: {
+        ...document.meta,
+        tokens: { ...document.meta.tokens, colors: { brand: "#3b82f6" } },
+      },
+    };
+    const spec = generateSpec(doc);
+    expect(spec).toContain("태블릿:");
+    expect(spec).toContain("bg token brand (#3b82f6)");
+  });
+
+  // frame + background 동시 override → 한 줄에 둘 다 포함
+  it("frame and background override appear on the same spec line", () => {
+    const spec = specWithBgOverrides({
+      tablet: {
+        frame: { x: 10, w: 200 },
+        background: "#aabbcc",
+      },
+    });
+    const tabletLine = spec.split("\n").find((l) => l.includes("태블릿:"));
+    expect(tabletLine).toBeDefined();
+    expect(tabletLine).toContain("@(");        // frame
+    expect(tabletLine).toContain("bg #aabbcc"); // background
+  });
+
+  // 회귀: override 없는 노드에는 tablet/mobile bg 라인 없음
+  it("no tablet/mobile bg lines emitted when node has no overrides (regression)", () => {
+    const { document } = buildDoc();
+    const spec = generateSpec(document);
+    expect(spec).not.toContain("태블릿:");
+    expect(spec).not.toContain("모바일:");
+  });
+});
+
 describe("flex layout (layout='flex')", () => {
   /** A Card child inside a flex root, with given flex options on the root. */
   function buildFlex(opts: Parameters<ReturnType<typeof useEditorStore.getState>["setNodeLayout"]>[1]) {

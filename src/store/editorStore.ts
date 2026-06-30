@@ -173,7 +173,11 @@ interface EditorState {
    * inherits from the cascade again), removing the whole bp override if it
    * becomes empty. desktop has no override → no-op.
    */
-  clearOverrideField: (id: string, bp: BreakpointId, field: "padding" | "margin") => void;
+  clearOverrideField: (
+    id: string,
+    bp: BreakpointId,
+    field: "padding" | "margin" | "background",
+  ) => void;
   undo: () => void;
   redo: () => void;
 }
@@ -240,6 +244,8 @@ function cloneOverrides(
       ...(ov.margin !== undefined
         ? { margin: typeof ov.margin === "string" ? ov.margin : { ...ov.margin } }
         : {}),
+      // background is a string — already copied by ...ov above; add an explicit
+      // deep-clone here if it ever becomes an object (e.g. a gradient spec).
     };
   }
   return out;
@@ -495,8 +501,20 @@ export const useEditorStore = create<EditorState>((set, get) => {
       );
     },
 
-    setNodeBackground: (id, background) =>
-      patchNode(id, (node) => ({ ...node, background }), `bg:${id}`),
+    setNodeBackground: (id, background) => {
+      const bp = get().activeBreakpoint;
+      patchNode(
+        id,
+        (node) => {
+          // desktop edits the base; a breakpoint edit stores the background in
+          // overrides[bp] (keeps base + sibling override fields intact).
+          if (bp === "desktop") return { ...node, background };
+          const prev = node.overrides?.[bp];
+          return { ...node, overrides: { ...node.overrides, [bp]: { ...prev, background } } };
+        },
+        `bg:${id}`,
+      );
+    },
 
     setNodeLayout: (id, partial) =>
       patchNode(

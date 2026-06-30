@@ -159,6 +159,23 @@ function overrideSpacingDecl(
 }
 
 /**
+ * A background declaration for an OVERRIDE. Like overrideSpacingDecl, it always
+ * emits something so it beats the base rule at that breakpoint: a valid color or
+ * token → that color; a dangling/unsafe value → `transparent` (clears the base
+ * bg at this bp rather than letting it leak). Same A03 whitelist as baseDecls.
+ */
+function overrideBackgroundDecl(value: string, tokens: DocumentTokens | undefined): string {
+  if (isColorTokenRef(value)) {
+    const key = colorTokenKey(value);
+    return sanitizeColor(tokens?.colors?.[key])
+      ? `background: var(${colorTokenVar(key)})`
+      : "background: transparent";
+  }
+  const bg = sanitizeColor(value);
+  return bg ? `background: ${bg}` : "background: transparent";
+}
+
+/**
  * CSS declarations for a node's override at a breakpoint (only the changed
  * fields). Emitted inside a max-width media query so the cascade matches
  * resolveFrame/resolveHidden (desktop base → tablet → mobile).
@@ -184,6 +201,7 @@ function overrideDecls(
   // whitelist) as the base, via overrideSpacingDecl.
   if (ov.padding !== undefined) parts.push(overrideSpacingDecl("padding", ov.padding, tokens));
   if (ov.margin !== undefined) parts.push(overrideSpacingDecl("margin", ov.margin, tokens));
+  if (ov.background !== undefined) parts.push(overrideBackgroundDecl(ov.background, tokens));
   return parts;
 }
 

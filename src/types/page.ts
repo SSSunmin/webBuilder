@@ -105,6 +105,7 @@ export interface NodeOverride {
   hidden?: boolean;
   padding?: Sides | string;
   margin?: Sides | string;
+  background?: string;
 }
 
 /** How a container arranges its children. Absent/"absolute" (the default and the
@@ -237,6 +238,22 @@ export function resolveMargin(node: PageNode, bp: BreakpointId): Sides | string 
   }
   if (bp === "mobile") {
     if (node.overrides?.mobile?.margin !== undefined) v = node.overrides.mobile.margin;
+  }
+  return v;
+}
+
+/**
+ * Resolve a node's background at a breakpoint (desktop-first, whole-value
+ * replace — like resolvePadding). Returns the raw value (literal color | token
+ * ref | undefined); the caller applies resolveColor(…, tokens).
+ */
+export function resolveBackground(node: PageNode, bp: BreakpointId): string | undefined {
+  let v = node.background;
+  if (bp === "tablet" || bp === "mobile") {
+    if (node.overrides?.tablet?.background !== undefined) v = node.overrides.tablet.background;
+  }
+  if (bp === "mobile") {
+    if (node.overrides?.mobile?.background !== undefined) v = node.overrides.mobile.background;
   }
   return v;
 }

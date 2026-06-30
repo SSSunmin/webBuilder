@@ -1,9 +1,9 @@
 ---
 type: Reference
 title: MD Export 형식
-description: generateMarkdown의 세 가지 모드(spec/code/both), 모든 모드 앞에 붙는 포터블 컨텍스트(서문+컴포넌트 범례), 명세서 트리 직렬화 방식, React 코드 생성 방식, 이벤트·override 출력 규칙. v2에서 디자인 토큰 → CSS 변수 출력 추가. v3(Stage A)에서 flex 컨테이너 래퍼 클래스·flow 자식 relative emit 추가. v4(Stage B1)에서 overrideDecls/overrideLines에 padding/margin 추가, overrideSpacingDecl(0-emit) 신규.
+description: generateMarkdown의 세 가지 모드(spec/code/both), 모든 모드 앞에 붙는 포터블 컨텍스트(서문+컴포넌트 범례), 명세서 트리 직렬화 방식, React 코드 생성 방식, 이벤트·override 출력 규칙. v2에서 디자인 토큰 → CSS 변수 출력 추가. v3(Stage A)에서 flex 컨테이너 래퍼 클래스·flow 자식 relative emit 추가. v4(Stage B1)에서 overrideDecls/overrideLines에 padding/margin 추가, overrideSpacingDecl(0-emit) 신규. v5(Stage B2)에서 overrideDecls에 background 추가, overrideBackgroundDecl(항상 emit·dangling→transparent) 신규. spec.ts overrideLines에 bgSummary 추가.
 resource: src/export/index.ts, src/export/spec.ts, src/export/code.ts, src/export/legend.ts
-tags: [export, markdown, spec, code, events, portable, legend, design-tokens, layout, flex, breakpoint, override, spacing]
+tags: [export, markdown, spec, code, events, portable, legend, design-tokens, layout, flex, breakpoint, override, spacing, background]
 timestamp: 2026-06-30
 ---
 
@@ -92,9 +92,10 @@ desktop(base)은 출력하지 않는다. tablet/mobile에 override가 있을 때
 - frame 변경: `- 태블릿: @(x,y) w×h` (resolveFrame 값)
 - **padding override (Stage B1)**: `- 태블릿: pad <값>` — 0이면 `"0"` 출력(base와 달리 생략 안 함). 토큰 ref면 `token <key> (<px>px)` 또는 `token <key> (미정의)`.
 - **margin override (Stage B1)**: `- 태블릿: margin <값>` — 동일 규칙.
-- frame + padding + margin이 함께 있으면 쉼표로 이어 한 줄에 출력: `- 태블릿: @(x,y) w×h, pad 16, margin 8`
+- **background override (Stage B2)**: `- 태블릿: bg <색상>` — 리터럴이면 `bg #rrggbb`, 토큰 ref면 `bg token <key> (<resolved>)` 또는 `bg token <key> (미정의)`. `bgSummary(ov.background, tokens)` 함수로 직렬화.
+- frame + padding + margin + background가 함께 있으면 쉼표로 이어 한 줄에 출력: `- 태블릿: @(x,y) w×h, pad 16, margin 8, bg #ff0000`
 
-`overrideLines(node, depth, tokens)` 함수가 처리. **`tokens` 파라미터(Stage B1 추가)**: spacing 토큰 ref 직렬화에 필요.
+`overrideLines(node, depth, tokens)` 함수가 처리. **`tokens` 파라미터(Stage B1 추가)**: spacing·color 토큰 ref 직렬화에 필요.
 
 ### 이벤트 출력
 
@@ -217,6 +218,7 @@ function overrideDecls(
 | `hidden` | `display: none` 또는 `display: block` (양방향 emit으로 re-show 가능) |
 | `padding` | `overrideSpacingDecl("padding", ov.padding, tokens)` |
 | `margin` | `overrideSpacingDecl("margin", ov.margin, tokens)` |
+| `background` | `overrideBackgroundDecl(ov.background, tokens)` (Stage B2) |
 
 #### overrideSpacingDecl — 0도 emit하는 spacing 선언 (Stage B1 신규)
 
@@ -233,6 +235,20 @@ function overrideSpacingDecl(
 - 토큰 ref(`token:<key>`): 토큰이 유효하면 `padding: var(--space-<key>)`, dangling이면 `padding: 0` (base 규칙 reset).
 - 리터럴 Sides: `cssSpacing(toSides(value))` 결과가 null(전부 0)이면 `padding: 0`, 아니면 `padding: <css>`.
 - 신뢰경계(A03): `sanitizeSpacing` + 토큰 화이트리스트 통과. base의 `spacingDecl`과 동일한 경계.
+
+#### overrideBackgroundDecl — 항상 emit하는 background 선언 (Stage B2 신규)
+
+```ts
+function overrideBackgroundDecl(value: string, tokens: DocumentTokens | undefined): string
+```
+
+`baseDecls`의 background 처리와 달리 **항상 선언을 emit**한다. override는 base 규칙을 이겨야 하므로 dangling/unsafe 값도 `background: transparent`로 명시적으로 emit해 base background가 해당 bp에서 새어 나오지 않도록 한다.
+
+- 유효 리터럴 색상(`sanitizeColor` 통과): `background: <color>`
+- 유효 토큰 ref(토큰 존재 + `sanitizeColor` 통과): `background: var(--color-<key>)`
+- dangling 토큰 ref(토큰 없음 또는 unsafe): `background: transparent`
+- unsafe 리터럴: `background: transparent`
+- **신뢰경계(A03)**: base의 `sanitizeColor` 화이트리스트와 동일. unsafe 값이 CSS에 그대로 주입되지 않는다.
 
 #### CSS cascade 주의
 
