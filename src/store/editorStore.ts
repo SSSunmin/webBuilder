@@ -1,6 +1,13 @@
 import { create } from "zustand";
 import { createNode, defaultFrameFor, getBlockDef, getComponentDef } from "../registry";
-import { DEFAULT_SHADOW, isValidTokenKey, resolveFrame, toSides } from "../types/page";
+import {
+  DEFAULT_SHADOW,
+  isValidTokenKey,
+  resolveFrame,
+  resolveMargin,
+  resolvePadding,
+  toSides,
+} from "../types/page";
 import type {
   BreakpointId,
   NodeFrame,
@@ -161,6 +168,12 @@ interface EditorState {
    * cascade (parent breakpoint / base) again. desktop has no override → no-op.
    */
   resetOverride: (id: string, bp: BreakpointId) => void;
+  /**
+   * Drop a single style field from a node's breakpoint override (so that field
+   * inherits from the cascade again), removing the whole bp override if it
+   * becomes empty. desktop has no override → no-op.
+   */
+  clearOverrideField: (id: string, bp: BreakpointId, field: "padding" | "margin") => void;
   undo: () => void;
   redo: () => void;
 }
@@ -220,6 +233,13 @@ function cloneOverrides(
     out[bp as "tablet" | "mobile"] = {
       ...ov,
       ...(ov.frame ? { frame: { ...ov.frame } } : {}),
+      // padding/margin may be a token-ref string (copy as-is) or a Sides (deep-clone).
+      ...(ov.padding !== undefined
+        ? { padding: typeof ov.padding === "string" ? ov.padding : { ...ov.padding } }
+        : {}),
+      ...(ov.margin !== undefined
+        ? { margin: typeof ov.margin === "string" ? ov.margin : { ...ov.margin } }
+        : {}),
     };
   }
   return out;
@@ -560,8 +580,20 @@ export const useEditorStore = create<EditorState>((set, get) => {
         return { ...d, meta: { ...d.meta, tokens: { ...d.meta.tokens, spacing } } };
       }, null),
 
-    setNodeSpacingValue: (id, which, value) =>
-      patchNode(id, (node) => ({ ...node, [which]: value }), null),
+    setNodeSpacingValue: (id, which, value) => {
+      const bp = get().activeBreakpoint;
+      patchNode(
+        id,
+        (node) => {
+          // desktop edits the base; a breakpoint edit stores the whole value in
+          // overrides[bp] (keeps base + sibling override fields intact).
+          if (bp === "desktop") return { ...node, [which]: value };
+          const prev = node.overrides?.[bp];
+          return { ...node, overrides: { ...node.overrides, [bp]: { ...prev, [which]: value } } };
+        },
+        null,
+      );
+    },
 
     setNodeRadius: (id, borderRadius) =>
       patchNode(
@@ -591,20 +623,31 @@ export const useEditorStore = create<EditorState>((set, get) => {
         ]
           .filter(Boolean)
           .join("|");
+      const bp = get().activeBreakpoint;
       const tokens = get().document?.meta.tokens;
       patchNode(
         id,
         (node) => {
           // Editing a side resolves any token ref to numbers first, so the node
           // switches from a uniform token to explicit per-side custom values.
-          const next = { ...node };
+          // On a breakpoint, the edit writes a COMPLETE Sides into overrides[bp]
+          // (seeded from the value resolved at that bp), so the override wholly
+          // replaces the inherited padding/margin rather than partially merging.
+          if (bp === "desktop") {
+            const next = { ...node };
+            if (partial.padding) next.padding = { ...toSides(node.padding, tokens), ...partial.padding };
+            if (partial.margin) next.margin = { ...toSides(node.margin, tokens), ...partial.margin };
+            return next;
+          }
+          const prev = node.overrides?.[bp];
+          const ov: NodeOverride = { ...prev };
           if (partial.padding) {
-            next.padding = { ...toSides(node.padding, tokens), ...partial.padding };
+            ov.padding = { ...toSides(resolvePadding(node, bp), tokens), ...partial.padding };
           }
           if (partial.margin) {
-            next.margin = { ...toSides(node.margin, tokens), ...partial.margin };
+            ov.margin = { ...toSides(resolveMargin(node, bp), tokens), ...partial.margin };
           }
-          return next;
+          return { ...node, overrides: { ...node.overrides, [bp]: ov } };
         },
         tag,
       );
@@ -840,7 +883,9 @@ export const useEditorStore = create<EditorState>((set, get) => {
       // content box (children snap to that area). The other axis keeps
       // inheriting (sparse override).
       const pf = resolveFrame(doc.nodes[pc.parentId], bp);
-      const pad = toSides(doc.nodes[pc.parentId].padding, doc.meta.tokens);
+      // Padding is bp-aware (per-breakpoint overrides), so resolve it at this bp
+      // too — otherwise centering uses the wrong content box on tablet/mobile.
+      const pad = toSides(resolvePadding(doc.nodes[pc.parentId], bp), doc.meta.tokens);
       const next: Record<string, Partial<NodeFrame>> = {};
       for (const cid of pc.childIds) {
         const cf = resolveFrame(doc.nodes[cid], bp);
@@ -880,6 +925,27 @@ export const useEditorStore = create<EditorState>((set, get) => {
           return { ...node, overrides };
         },
         `reset:${id}:${bp}`,
+      );
+    },
+
+    clearOverrideField: (id, bp, field) => {
+      if (bp === "desktop") return;
+      patchNode(
+        id,
+        (node) => {
+          const prev = node.overrides?.[bp];
+          if (!prev || prev[field] === undefined) return node;
+          const nextOv: NodeOverride = { ...prev };
+          delete nextOv[field];
+          const overrides: Partial<Record<Exclude<BreakpointId, "desktop">, NodeOverride>> = {
+            ...node.overrides,
+          };
+          // Drop the whole bp override once its last field is cleared.
+          if (Object.keys(nextOv).length === 0) delete overrides[bp];
+          else overrides[bp] = nextOv;
+          return { ...node, overrides };
+        },
+        `clearov:${id}:${bp}:${field}`,
       );
     },
 

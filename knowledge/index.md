@@ -18,7 +18,7 @@
 
 ### 데이터 모델
 
-- [PageDocument / PageNode](/data-model/page-node.md) — 저장 단위, 노드 트리, NodeFrame, Sides, DocumentTokens(색상·글꼴·간격 토큰), NodeOverride, EventBinding, PropSchema, 레이아웃 모드(flex/absolute), LayoutMode/FlowAlign/FlowJustify, resolveFlow
+- [PageDocument / PageNode](/data-model/page-node.md) — 저장 단위, 노드 트리, NodeFrame, Sides, DocumentTokens(색상·글꼴·간격 토큰), NodeOverride(frame 축별 병합 + padding/margin 통째 교체), EventBinding, PropSchema, 레이아웃 모드(flex/absolute), LayoutMode/FlowAlign/FlowJustify, resolveFlow, resolvePadding/resolveMargin(Stage B1)
 
 ### 스토어
 

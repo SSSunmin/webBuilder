@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useEditorStore } from "../store/editorStore";
 import { makeColorTokenRef, makeSpacingTokenRef } from "../types/page";
+import type { PageNode } from "../types/page";
 import { generateSpec } from "./spec";
 import { generateCode } from "./code";
 
@@ -519,7 +520,7 @@ describe("color token export", () => {
   });
 
   it("a dangling ref (deleted token) drops the background, not the node", () => {
-    const { document, child } = tokenDoc();
+    const { child } = tokenDoc();
     useEditorStore.getState().removeColorToken("brand");
     const d = useEditorStore.getState().document!;
     const code = generateCode(d);
@@ -643,6 +644,197 @@ describe("spacing token export", () => {
     const code = generateCode(corrupt);
     expect(code).not.toContain("* {"); // unsafe value never reaches the CSS
     expect(code).not.toContain("var(--space-gap)"); // dangling/unsafe → dropped
+  });
+});
+
+describe("B1: per-breakpoint padding/margin overrides (code export)", () => {
+  /** Build a doc with a Card child whose overrides are set via raw object. */
+  function codeWithSpacingOverrides(overrides: PageNode["overrides"], baseProps?: {
+    padding?: PageNode["padding"];
+    margin?: PageNode["margin"];
+  }) {
+    const { document, childId } = buildDoc();
+    const doc = {
+      ...document,
+      nodes: {
+        ...document.nodes,
+        [childId]: {
+          ...document.nodes[childId],
+          ...(baseProps ?? {}),
+          overrides,
+        },
+      },
+    };
+    return generateCode(doc);
+  }
+
+  // 11. tablet padding override → @media (max-width: 768px) 블록에 padding: 규칙
+  it("tablet padding override emits a padding rule inside @media (max-width: 768px)", () => {
+    const code = codeWithSpacingOverrides({
+      tablet: { padding: { top: 16, right: 16, bottom: 16, left: 16 } },
+    });
+    expect(code).toContain("@media (max-width: 768px)");
+    expect(code).toContain("padding: 16px");
+    // base 룰에는 padding이 없어야 함 (base padding이 없으므로)
+    // @media 블록에만 있어야 함
+  });
+
+  // 12. mobile margin override → @media (max-width: 375px) 블록에 margin: 규칙
+  it("mobile margin override emits a margin rule inside @media (max-width: 375px)", () => {
+    const code = codeWithSpacingOverrides({
+      mobile: { margin: { top: 8, right: 8, bottom: 8, left: 8 } },
+    });
+    expect(code).toContain("@media (max-width: 375px)");
+    expect(code).toContain("margin: 8px");
+  });
+
+  // 13. override 0 (Sides 전부 0) → 해당 미디어블록에 padding: 0 emit (생략 금지)
+  it("all-zero padding override emits 'padding: 0' in the media block (must not be omitted)", () => {
+    // base에 non-zero padding을 줘서 override 0이 base를 이겨야 함을 명확히 함
+    const code = codeWithSpacingOverrides(
+      { tablet: { padding: { top: 0, right: 0, bottom: 0, left: 0 } } },
+      { padding: { top: 20, right: 20, bottom: 20, left: 20 } },
+    );
+    expect(code).toContain("@media (max-width: 768px)");
+    expect(code).toContain("padding: 0");
+    // base rule에는 20px padding이 있어야 함
+    expect(code).toContain("padding: 20px");
+  });
+
+  // 14-a. token override → var(--space-…)
+  it("token padding override emits var(--space-…) in the media block", () => {
+    const { document, childId } = buildDoc();
+    useEditorStore.getState().setSpacingToken("md", 16);
+    const doc = {
+      ...document,
+      nodes: {
+        ...document.nodes,
+        [childId]: {
+          ...document.nodes[childId],
+          overrides: { tablet: { padding: makeSpacingTokenRef("md") } },
+        },
+      },
+      meta: {
+        ...document.meta,
+        tokens: { ...document.meta.tokens, spacing: { md: 16 } },
+      },
+    };
+    const code = generateCode(doc);
+    expect(code).toContain("@media (max-width: 768px)");
+    expect(code).toContain("padding: var(--space-md)");
+  });
+
+  // 14-b. dangling token override → padding: 0
+  it("dangling token padding override emits 'padding: 0' (safe fallback)", () => {
+    const { document, childId } = buildDoc();
+    const doc = {
+      ...document,
+      nodes: {
+        ...document.nodes,
+        [childId]: {
+          ...document.nodes[childId],
+          // token "gone"은 tokens에 정의되지 않음 → dangling
+          overrides: { tablet: { padding: makeSpacingTokenRef("gone") } },
+        },
+      },
+    };
+    const code = generateCode(doc);
+    expect(code).toContain("@media (max-width: 768px)");
+    expect(code).toContain("padding: 0");
+    expect(code).not.toContain("var(--space-gone)");
+  });
+
+  // 15. 회귀: 기존 frame/hidden override emit 불변
+  it("regression: frame override still emits left/top/width/height in tablet media block", () => {
+    const code = codeWithSpacingOverrides({
+      tablet: { frame: { x: 10, y: 20, w: 200, h: 80 } },
+    });
+    expect(code).toContain("@media (max-width: 768px)");
+    expect(code).toContain("left: 10px");
+    expect(code).toContain("top: 20px");
+    expect(code).toContain("width: 200px");
+    expect(code).toContain("height: 80px");
+  });
+
+  it("regression: hidden override still emits display:none in mobile media block", () => {
+    const code = codeWithSpacingOverrides({ mobile: { hidden: true } });
+    expect(code).toContain("@media (max-width: 375px)");
+    expect(code).toContain("display: none");
+  });
+
+  // tablet과 mobile 양쪽 padding override → 두 미디어블록 모두 emit
+  it("both tablet and mobile padding overrides emit in their respective media blocks", () => {
+    const code = codeWithSpacingOverrides({
+      tablet: { padding: { top: 16, right: 16, bottom: 16, left: 16 } },
+      mobile: { padding: { top: 4, right: 4, bottom: 4, left: 4 } },
+    });
+    expect(code).toContain("@media (max-width: 768px)");
+    expect(code).toContain("@media (max-width: 375px)");
+    // tablet 블록이 mobile 블록보다 앞에 있어야 함
+    expect(code.indexOf("max-width: 768px")).toBeLessThan(code.indexOf("max-width: 375px"));
+  });
+});
+
+describe("B1: per-breakpoint padding/margin overrides (spec export)", () => {
+  function specWithOverrides(overrides: object) {
+    const { document, childId } = buildDoc();
+    const doc = {
+      ...document,
+      nodes: {
+        ...document.nodes,
+        [childId]: { ...document.nodes[childId], overrides },
+      },
+    };
+    return generateSpec(doc);
+  }
+
+  // 16-a. tablet padding override → 스펙에 `태블릿: ... pad ...` 라인
+  it("tablet padding override appears as '태블릿: ... pad ...' in spec", () => {
+    const spec = specWithOverrides({
+      tablet: { padding: { top: 16, right: 16, bottom: 16, left: 16 } },
+    });
+    expect(spec).toContain("태블릿:");
+    expect(spec).toMatch(/태블릿:.*pad/);
+  });
+
+  // 16-b. mobile margin override → `모바일: ... margin ...` 라인
+  it("mobile margin override appears as '모바일: ... margin ...' in spec", () => {
+    const spec = specWithOverrides({
+      mobile: { margin: { top: 8, right: 16, bottom: 8, left: 16 } },
+    });
+    expect(spec).toContain("모바일:");
+    expect(spec).toMatch(/모바일:.*margin/);
+  });
+
+  // 0 override → "pad 0" (생략되지 않음)
+  it("all-zero padding override appears as 'pad 0' in spec (not omitted)", () => {
+    const spec = specWithOverrides({
+      tablet: { padding: { top: 0, right: 0, bottom: 0, left: 0 } },
+    });
+    expect(spec).toContain("태블릿:");
+    expect(spec).toContain("pad 0");
+  });
+
+  // frame + padding 동시 override → 한 줄에 둘 다 포함
+  it("frame and padding override appear on the same line in spec", () => {
+    const spec = specWithOverrides({
+      tablet: {
+        frame: { x: 10, w: 200 },
+        padding: { top: 8, right: 8, bottom: 8, left: 8 },
+      },
+    });
+    const tabletLine = spec.split("\n").find((l) => l.includes("태블릿:"));
+    expect(tabletLine).toBeDefined();
+    expect(tabletLine).toContain("@(");   // frame
+    expect(tabletLine).toContain("pad");  // padding
+  });
+
+  // 회귀: override 없는 노드에는 태블릿:/모바일: 라인 없음
+  it("no override lines emitted when node has no overrides (regression)", () => {
+    const { document } = buildDoc();
+    const spec = generateSpec(document);
+    expect(spec).not.toContain("태블릿:");
+    expect(spec).not.toContain("모바일:");
   });
 });
 

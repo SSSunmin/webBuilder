@@ -1,9 +1,9 @@
 ---
 type: Reference
 title: 에디터 스토어 (Zustand)
-description: useEditorStore 상태 구조, 전체 액션 목록, undo/redo coalescing 메커니즘, breakpoint 편집 모드. v2에서 글꼴·간격 토큰 액션 추가. v3(Stage A)에서 setNodeLayout 액션 추가.
+description: useEditorStore 상태 구조, 전체 액션 목록, undo/redo coalescing 메커니즘, breakpoint 편집 모드. v2에서 글꼴·간격 토큰 액션 추가. v3(Stage A)에서 setNodeLayout 액션 추가. v4(Stage B1)에서 updateNodeSpacing/setNodeSpacingValue bp 인지화, clearOverrideField 신규, cloneOverrides 깊은 복사 확장, centerInParent bp 인지.
 resource: src/store/editorStore.ts
-tags: [store, zustand, undo-redo, state, breakpoint, design-tokens, layout, flex]
+tags: [store, zustand, undo-redo, state, breakpoint, design-tokens, layout, flex, spacing, override]
 timestamp: 2026-06-30
 ---
 
@@ -49,6 +49,7 @@ tag === null     →  항상 새 스냅샷 (이산적 액션)
 - event 편집: `event:<id>:<eventId>:<fields>`
 - hidden 토글: `hidden:<id>:<bp>`
 - reset override: `reset:<id>:<bp>`
+- override 필드 해제: `clearov:<id>:<bp>:<field>` (Stage B1)
 - 색상 토큰 편집: `token:color:<key>` (색상 피커 드래그 중 coalesce)
 - 글꼴 토큰 편집: `token:font:<key>`
 - 간격 토큰 편집: `token:spacing:<key>`
@@ -91,8 +92,8 @@ tag === null     →  항상 새 스냅샷 (이산적 액션)
 | `setNodeLayout(id, partial)` | `layout:<id>:<keys>` | 컨테이너 자식 배치 모드·flex 옵션 부분 갱신. `layout`이 `"flex"`가 아니면 `layout` 필드 자체를 삭제(canonical absolute = 필드 없음). flex 전용 옵션(`flexDirection`/`gap`/`alignItems`/`justifyContent`)은 absolute 전환 후에도 잔류 — 다시 flex로 토글하면 이전 설정 복원. |
 | `updateNodeShadow(id, partial)` | `shadow:<id>:<fields>` | 픽셀 그림자(ShadowSpec) 부분 병합 (없으면 DEFAULT_SHADOW 생성) |
 | `clearNodeShadow(id)` | null | 그림자 제거 (boxShadow → undefined) |
-| `updateNodeSpacing(id, {padding?, margin?})` | `spacing:...` | padding/margin 부분 업데이트. 토큰 참조 중인 노드는 resolve 후 Sides로 전환 |
-| `setNodeSpacingValue(id, which, value)` | null | padding/margin을 Sides 또는 `token:<key>` 참조로 통째로 교체 (인스펙터에서 리터럴↔토큰 전환 시 사용) |
+| `updateNodeSpacing(id, {padding?, margin?})` | `spacing:...` | padding/margin 부분 업데이트. 토큰 참조 중인 노드는 resolve 후 Sides로 전환. **bp 인지(Stage B1)**: `activeBreakpoint`가 desktop이 아니면 `resolvePadding/resolveMargin`으로 해당 bp에서 resolved된 값을 seed해 **완전한 Sides**로 `overrides[bp]`에 기록(base + 형제 override 필드 보존). desktop 경로(base frame 직접 편집)는 기존 동작 유지. |
+| `setNodeSpacingValue(id, which, value)` | null | padding/margin을 Sides 또는 `token:<key>` 참조로 통째로 교체. **bp 인지(Stage B1)**: desktop이면 base에, 그 외면 `overrides[bp][which]`에 저장(형제 override 필드 보존). 인스펙터에서 리터럴↔토큰 전환 시 사용. |
 
 ### 디자인 토큰 액션
 
@@ -136,12 +137,15 @@ tag === null     →  항상 새 스냅샷 (이산적 액션)
 
 `findParentChild(nodes, ids)`·`sameParent(nodes, ids)`는 export된 순수 헬퍼다. AlignToolbar가 이걸로 선택 형태를 판별 — 부모+자식이면 `centerInParent` 버튼을, 동일 부모 형제면 align/distribute 버튼을 보이고(`!sameParent`면 비활성화) 한다.
 
+**`centerInParent` bp 인지(Stage B1)**: 부모의 패딩을 `resolvePadding(parent, bp)`로 bp에서 resolved된 값으로 읽어 콘텐츠 박스를 계산한다. tablet/mobile에서 padding override가 있어도 올바른 패딩 영역 기준으로 가운데 정렬된다.
+
 ### 브레이크포인트 오버라이드
 
 | 액션 | 설명 |
 |---|---|
 | `setNodeHidden(id, bp, hidden)` | bp별 hidden 플래그 (desktop 불가) |
-| `resetOverride(id, bp)` | bp 오버라이드 전체 삭제 (desktop 불가) |
+| `resetOverride(id, bp)` | bp 오버라이드 전체 삭제 (desktop 불가). **B1 주의**: padding/margin override도 함께 삭제된다. 개별 필드만 해제하려면 `clearOverrideField`를 쓴다. |
+| `clearOverrideField(id, bp, field)` | **Stage B1 신규.** `field`("padding" 또는 "margin") 하나만 bp override에서 삭제해 cascade 상속으로 되돌린다. desktop 호출은 no-op. override에 남은 필드가 없으면 해당 bp override 전체를 삭제해 메모리를 절약한다. undo 태그: `clearov:<id>:<bp>:<field>`. |
 
 ### Undo / Redo
 
@@ -156,6 +160,7 @@ tag === null     →  항상 새 스냅샷 (이산적 액션)
 - `collectSubtree(nodes, id)`: 서브트리 id 배열 수집 (exported)
 - `normalizeDocument(doc)`: 구버전 문서에 frame/background/borderRadius 백필
 - `writeFrame(node, bp, partial)`: bp 인식 frame 기록 헬퍼
+- `cloneOverrides(overrides)`: **Stage B1 확장.** `duplicateNode`가 호출. `frame`은 얕은 복사, **`padding`·`margin`은 문자열(token ref)이면 그대로, `Sides`면 객체 복사** — 원본과 복사본이 같은 Sides 객체를 공유하지 않도록 깊은 복사한다.
 
 # 관련 개념
 

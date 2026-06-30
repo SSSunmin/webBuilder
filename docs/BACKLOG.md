@@ -9,7 +9,7 @@
 
 | # | 기능 | 상태 | 한 줄 |
 |---|------|------|-------|
-| 1 | 반응형 export 강건화 | Stage A 완료 · B [대기] | frame/hidden 반응형 생성(A). B=per-bp padding/margin(B1)·background(B2) 오버라이드 |
+| 1 | 반응형 export 강건화 | Stage A 완료 · B1 완료 · B2 [대기] | frame/hidden 반응형 생성(A). B=per-bp padding/margin(B1)·background(B2) 오버라이드 |
 | 2 | 이벤트/액션 완성 | 완료 | submit·custom 액션을 실제 코드로 생성 |
 | 3 | 디자인 토큰/테마 | v2(색상·폰트·간격) 완료 | 문서 전역 색상·글꼴·간격 토큰 + 노드 참조 + export(:root/var) |
 | 4 | 레이아웃 모델(flex/grid) | Stage A 완료 · B [대기] | flex 컨테이너(A). B=flex 자식 캔버스 드래그 순서변경(삽입선). grid·반응형 레이아웃은 C |
@@ -39,7 +39,21 @@
 
 ---
 
-### Stage B — per-breakpoint 스타일 오버라이드 (padding·margin·background)  · 상태 [대기]
+### Stage B — per-breakpoint 스타일 오버라이드 (padding·margin·background)  · 상태 B1 완료 · B2 [대기]
+
+**B1 — 완료 (2026-06-30, 브랜치 `task/1-bp-spacing-override`)**: padding·margin per-bp 오버라이드.
+- `NodeOverride`에 `padding`·`margin`(`Sides | string`, 완전한 값 통째 교체) 추가 — 전 문서 하위호환.
+- `resolvePadding`/`resolveMargin(node, bp)`: 데스크톱-퍼스트 cascade(정의 시 통째 치환, tablet→mobile 상속).
+- store: `updateNodeSpacing`·`setNodeSpacingValue` bp 인지화(bp≠desktop → resolved-at-bp seed한 완전 Sides를
+  `overrides[bp]`에 기록, desktop 경로 보존), `cloneOverrides` 깊은 복사, 신규 `clearOverrideField`(필드 단위 해제),
+  `centerInParent`도 `resolvePadding`로 bp 인지화.
+- export: 코드 `overrideSpacingDecl`(override는 0도 emit해 base를 이김; 토큰→var, dangling→0) + `@media` 블록,
+  스펙 `overrideLines`에 pad/margin. **A03**: base와 동일 `sanitizeSpacing`/토큰 화이트리스트만 통과.
+- 캔버스(`NodeView`)·인스펙터(resolved-at-bp 표시 + "이 화면서 변경됨" 배지 + ↺ 해제) bp 반영.
+- 검증: typecheck·build 통과, 테스트 256개(resolver·store·clearOverrideField·code/spec emit·회귀 +31).
+- 리뷰(code-reviewer): critical 2(centerInParent bp 누락·cloneOverrides 가드) 해소, A03 레드플래그 없음.
+
+**B2 — 대기**: background per-bp 오버라이드(`sanitizeColor`·토큰). B1과 동일 패턴, 더 작음.
 
 **목표**: 노드별 태블릿/모바일 오버라이드를 `frame`/`hidden` 외에 **padding·margin·background**까지
 확장. Stage A의 `@media` 인프라 위에 얹는다. **전 문서 100% 하위호환**(additive, 마이그레이션 없음).
