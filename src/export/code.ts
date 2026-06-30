@@ -1,5 +1,12 @@
 import { getComponentDef } from "../registry";
-import type { BreakpointId, DocumentTokens, PageDocument, PageNode, Sides } from "../types/page";
+import type {
+  BreakpointId,
+  DocumentTokens,
+  PageDocument,
+  PageNode,
+  ResolvedFlow,
+  Sides,
+} from "../types/page";
 import {
   BREAKPOINTS,
   colorTokenKey,
@@ -7,6 +14,7 @@ import {
   fontTokenVar,
   isColorTokenRef,
   isSpacingTokenRef,
+  resolveFlow,
   sanitizeColor,
   sanitizeFontFamily,
   sanitizeSpacing,
@@ -60,18 +68,44 @@ function spacingDecl(
   return css ? `${prop}: ${css}` : null;
 }
 
-/** Base (desktop) CSS declarations for a node's frame + box styling. */
-function baseDecls(node: PageNode, isRoot: boolean, tokens: DocumentTokens | undefined): string[] {
+/** CSS declarations for a flex container's child wrapper. Children wrap so a
+ * narrower container reflows them; values come from resolveFlow (gap sanitized,
+ * enums mapped to fixed keywords) so nothing here can break out of the block. */
+function flowDecls(flow: ResolvedFlow): string[] {
+  const parts = [
+    "display: flex",
+    `flex-direction: ${flow.flexDirection}`,
+    "flex-wrap: wrap",
+    "width: 100%",
+    "height: 100%",
+    "box-sizing: border-box",
+  ];
+  if (flow.gap) parts.push(`gap: ${flow.gap}px`);
+  parts.push(`align-items: ${flow.alignItems}`, `justify-content: ${flow.justifyContent}`);
+  return parts;
+}
+
+/** Base (desktop) CSS declarations for a node's frame + box styling. `inFlow` =
+ * the parent is a flex container, so this node flows (relative, fixed size)
+ * instead of being absolutely positioned. */
+function baseDecls(
+  node: PageNode,
+  isRoot: boolean,
+  tokens: DocumentTokens | undefined,
+  inFlow: boolean,
+): string[] {
   const f = node.frame;
   const parts = isRoot
     ? ["position: relative", `width: ${f.w}px`, `height: ${f.h}px`, "margin: 0 auto"]
-    : [
-        "position: absolute",
-        `left: ${f.x}px`,
-        `top: ${f.y}px`,
-        `width: ${f.w}px`,
-        `height: ${f.h}px`,
-      ];
+    : inFlow
+      ? ["position: relative", `width: ${f.w}px`, `height: ${f.h}px`, "flex: 0 0 auto"]
+      : [
+          "position: absolute",
+          `left: ${f.x}px`,
+          `top: ${f.y}px`,
+          `width: ${f.w}px`,
+          `height: ${f.h}px`,
+        ];
   if (node.background) {
     // A token reference becomes a CSS custom property backed by the :root block —
     // but only when the token still exists AND its value is a safe color; a
@@ -139,8 +173,9 @@ function pushRules(
   node: PageNode,
   isRoot: boolean,
   tokens: DocumentTokens | undefined,
+  inFlow: boolean,
 ): void {
-  acc.base.push(`.${cls} { ${baseDecls(node, isRoot, tokens).join("; ")}; }`);
+  acc.base.push(`.${cls} { ${baseDecls(node, isRoot, tokens, inFlow).join("; ")}; }`);
   const t = overrideDecls(node, "tablet");
   if (t.length) acc.tablet.push(`.${cls} { ${t.join("; ")}; }`);
   const m = overrideDecls(node, "mobile");
@@ -224,6 +259,7 @@ function renderNode(
   isRoot: boolean,
   acc: CssAccum,
   visited: Set<string> = new Set(),
+  inFlow = false,
 ): string {
   // Guard against corrupted documents with cyclic children references.
   if (visited.has(nodeId)) return "";
@@ -232,16 +268,29 @@ function renderNode(
   visited.add(nodeId);
 
   const cls = `pg-${acc.n++}`;
-  pushRules(acc, cls, node, isRoot, doc.meta.tokens);
+  pushRules(acc, cls, node, isRoot, doc.meta.tokens, inFlow);
 
   const def = getComponentDef(node.type);
+  const isContainer = def?.isContainer ?? true;
+  // A flex container flows its children (relative, wrapping) instead of placing
+  // them absolutely — mirrors the canvas (NodeView).
+  const flow = isContainer ? resolveFlow(node) : null;
   // Unknown type (imported JSON / swapped registry): keep the node and its
   // subtree with a placeholder comment instead of silently dropping them.
   // Treat unknown as a possible container so children are never lost.
-  const childCodes = (def?.isContainer ?? true)
-    ? node.children.map((cid) => renderNode(doc, cid, false, acc, visited)).filter(Boolean)
+  const childCodes = isContainer
+    ? node.children
+        .map((cid) => renderNode(doc, cid, false, acc, visited, Boolean(flow)))
+        .filter(Boolean)
     : [];
-  const childrenBlock = childCodes.join("\n");
+  let childrenBlock = childCodes.join("\n");
+  // Wrap flow children in a flex div (its own class) so they reflow on narrow
+  // widths; the wrapper carries the layout while the node box stays positioned.
+  if (flow && childrenBlock) {
+    const fcls = `${cls}-c`;
+    acc.base.push(`.${fcls} { ${flowDecls(flow).join("; ")}; }`);
+    childrenBlock = `<div className="${fcls}">\n${indentBlock(childrenBlock, 2)}\n</div>`;
+  }
   const inner = def
     ? def.toCode(node, indentBlock(childrenBlock, 2))
     : [`{/* unknown component: ${safeComment(node.type)} */}`, indentBlock(childrenBlock, 2)]

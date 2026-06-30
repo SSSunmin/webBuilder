@@ -103,6 +103,14 @@ interface EditorState {
   moveNodeBy: (id: string, dx: number, dy: number, tag?: string) => void;
   setNodeBackground: (id: string, background: string) => void;
   setNodeRadius: (id: string, borderRadius: number) => void;
+  /** Set a container's child-layout mode and flex options. Switching to
+   * "absolute" drops the layout field (canonical absolute = absent). */
+  setNodeLayout: (
+    id: string,
+    partial: Partial<
+      Pick<PageNode, "layout" | "flexDirection" | "gap" | "alignItems" | "justifyContent">
+    >,
+  ) => void;
   /** Upsert a document-level color token. Invalid keys are ignored. */
   setColorToken: (key: string, value: string) => void;
   /** Remove a color token. Nodes still referencing it render without that color
@@ -469,6 +477,21 @@ export const useEditorStore = create<EditorState>((set, get) => {
 
     setNodeBackground: (id, background) =>
       patchNode(id, (node) => ({ ...node, background }), `bg:${id}`),
+
+    setNodeLayout: (id, partial) =>
+      patchNode(
+        id,
+        (node) => {
+          const next: PageNode = { ...node, ...partial };
+          // Canonical absolute = no layout field (matches pre-flex documents).
+          // Flex-only options are kept so toggling back restores the prior setup.
+          if (next.layout !== "flex") delete next.layout;
+          return next;
+        },
+        // Coalesce edits to the same control (e.g. dragging the gap number),
+        // but keep direction/align/justify as their own undo steps.
+        `layout:${id}:${Object.keys(partial).join(",")}`,
+      ),
 
     setColorToken: (key, value) => {
       if (!isValidTokenKey(key)) return;

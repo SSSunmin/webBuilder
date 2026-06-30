@@ -9,6 +9,7 @@ import {
   BREAKPOINTS,
   documentFontFamily,
   resolveColor,
+  resolveFlow,
   resolveFrame,
   resolveHidden,
   shadowCss,
@@ -16,8 +17,11 @@ import {
 } from "../types/page";
 
 /** Recursively renders a node and its subtree on the canvas with absolute
- * positioning, wired for selection, drag-to-move, drop (containers), resize. */
-export function NodeView({ nodeId }: { nodeId: string }) {
+ * positioning, wired for selection, drag-to-move, drop (containers), resize.
+ * `inFlow` = the parent is a flex container, so this node flows (relative,
+ * fixed size) instead of being absolutely positioned, and can't be drag-moved
+ * (reorder it from the layer tree instead). */
+export function NodeView({ nodeId, inFlow = false }: { nodeId: string; inFlow?: boolean }) {
   const node = useEditorStore((s) => s.document?.nodes[nodeId]);
   // Resolve a token-referencing background to its literal color, selecting the
   // computed string so the canvas re-renders live when the token value changes.
@@ -44,7 +48,7 @@ export function NodeView({ nodeId }: { nodeId: string }) {
     disabled: !container,
   });
   const { setNodeRef: dragRef, listeners, attributes, transform, isDragging } =
-    useDraggable({ id: `drag:${nodeId}`, data: { nodeId }, disabled: isRoot });
+    useDraggable({ id: `drag:${nodeId}`, data: { nodeId }, disabled: isRoot || inFlow });
 
   if (!node || !def) return null;
 
@@ -61,9 +65,32 @@ export function NodeView({ nodeId }: { nodeId: string }) {
     dragRef(el);
   };
 
+  // A flex container flows its children: wrap them so they reflow (wrap) when the
+  // container narrows, and tell each child it's in-flow (relative, no drag).
+  const flow = container ? resolveFlow(node) : null;
   const childEls = container
-    ? node.children.map((cid) => <NodeView key={cid} nodeId={cid} />)
+    ? node.children.map((cid) => <NodeView key={cid} nodeId={cid} inFlow={Boolean(flow)} />)
     : undefined;
+  // Wrap only when there are children, so an empty flex container has the same
+  // structure as the code export (which skips the wrapper when empty).
+  const childContent = flow && childEls && childEls.length ? (
+    <div
+      className="h-full w-full"
+      style={{
+        display: "flex",
+        boxSizing: "border-box",
+        flexDirection: flow.flexDirection,
+        flexWrap: flow.flexWrap,
+        gap: flow.gap,
+        alignItems: flow.alignItems,
+        justifyContent: flow.justifyContent,
+      }}
+    >
+      {childEls}
+    </div>
+  ) : (
+    childEls
+  );
 
   const startResize = (e: ReactPointerEvent) => {
     e.stopPropagation();
@@ -123,18 +150,30 @@ export function NodeView({ nodeId }: { nodeId: string }) {
         // Base font applied at the root so all nodes inherit it (mirrors export).
         fontFamily: documentFontFamily(tokens),
       }
-    : {
-        position: "absolute",
-        left: frame.x,
-        top: frame.y,
-        width: frame.w,
-        height: frame.h,
-        background,
-        borderRadius: node.borderRadius,
-        boxShadow,
-        transform: CSS.Translate.toString(transform),
-        zIndex: isDragging ? 1000 : selected ? 10 : undefined,
-      };
+    : inFlow
+      ? {
+          // Flex item: flow normally, keep its fixed size, don't grow/shrink.
+          position: "relative",
+          width: frame.w,
+          height: frame.h,
+          flex: "0 0 auto",
+          background,
+          borderRadius: node.borderRadius,
+          boxShadow,
+          zIndex: selected ? 10 : undefined,
+        }
+      : {
+          position: "absolute",
+          left: frame.x,
+          top: frame.y,
+          width: frame.w,
+          height: frame.h,
+          background,
+          borderRadius: node.borderRadius,
+          boxShadow,
+          transform: CSS.Translate.toString(transform),
+          zIndex: isDragging ? 1000 : selected ? 10 : undefined,
+        };
 
   return (
     <div
@@ -167,7 +206,7 @@ export function NodeView({ nodeId }: { nodeId: string }) {
         isDragging ? "opacity-80" : "",
       ].join(" ")}
     >
-      {def.render(node.props, childEls)}
+      {def.render(node.props, childContent)}
       {hidden && (
         <span className="pointer-events-none absolute -top-2 right-1 z-20 rounded-chip bg-ink px-1.5 py-0.5 text-[10px] font-medium text-white">
           숨김

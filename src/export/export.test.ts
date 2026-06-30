@@ -645,3 +645,60 @@ describe("spacing token export", () => {
     expect(code).not.toContain("var(--space-gap)"); // dangling/unsafe → dropped
   });
 });
+
+describe("flex layout (layout='flex')", () => {
+  /** A Card child inside a flex root, with given flex options on the root. */
+  function buildFlex(opts: Parameters<ReturnType<typeof useEditorStore.getState>["setNodeLayout"]>[1]) {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Flex Page");
+    const child = useEditorStore.getState().addNode(doc.rootId, "Card")!;
+    useEditorStore.getState().setNodeLayout(doc.rootId, { layout: "flex", ...opts });
+    return { rootId: doc.rootId, child };
+  }
+
+  it("emits a flex wrapper rule and flows children (relative, not absolute)", () => {
+    buildFlex({ gap: 8, flexDirection: "row", justifyContent: "center", alignItems: "end" });
+    const code = generateCode(useEditorStore.getState().document!);
+    // A dedicated wrapper class carries the flex layout for the root's children.
+    expect(code).toContain(".pg-0-c {");
+    expect(code).toContain("display: flex");
+    expect(code).toContain("flex-direction: row");
+    expect(code).toContain("flex-wrap: wrap"); // narrowing reflows children
+    expect(code).toContain("gap: 8px");
+    expect(code).toContain("justify-content: center");
+    expect(code).toContain("align-items: flex-end");
+    expect(code).toContain('<div className="pg-0-c">'); // wrapper wraps the children
+    // The flow child is relative + non-growing, no absolute left/top.
+    expect(code).toContain("flex: 0 0 auto");
+    expect(code).toMatch(/\.pg-1 \{[^}]*position: relative/);
+    expect(code).not.toMatch(/\.pg-1 \{[^}]*position: absolute/);
+  });
+
+  it("omits gap when zero but still emits the flex wrapper", () => {
+    buildFlex({ gap: 0 });
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).toContain("display: flex");
+    expect(code).not.toContain("gap:");
+  });
+
+  it("keeps children absolute for a default (absolute) container — no regression", () => {
+    const store = useEditorStore.getState();
+    const doc = store.newDocument("Abs Page");
+    useEditorStore.getState().addNode(doc.rootId, "Card");
+    const code = generateCode(useEditorStore.getState().document!);
+    expect(code).not.toContain("display: flex");
+    expect(code).not.toContain("-c {");
+    expect(code).toMatch(/\.pg-1 \{[^}]*position: absolute/);
+  });
+
+  it("spec shows the flex layout and drops x/y for flow children", () => {
+    buildFlex({ gap: 8, flexDirection: "column", justifyContent: "between" });
+    const spec = generateSpec(useEditorStore.getState().document!);
+    expect(spec).toContain("flex 세로");
+    expect(spec).toContain("gap 8");
+    expect(spec).toContain("정렬 space-between");
+    // The flow child reports size only — no @(x,y) coordinate.
+    expect(spec).toMatch(/\*\*Card\*\* \(container\) — \d+×\d+/);
+    expect(spec).not.toMatch(/\*\*Card\*\* \(container\) — @\(/);
+  });
+});

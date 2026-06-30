@@ -703,3 +703,40 @@ describe("centerInParent", () => {
     expect(store().document!.nodes[b].frame.x).toBe(200);
   });
 });
+
+describe("setNodeLayout", () => {
+  it("sets flex mode and options on a container", () => {
+    const rootId = store().document!.rootId;
+    store().setNodeLayout(rootId, {
+      layout: "flex",
+      flexDirection: "column",
+      gap: 16,
+      justifyContent: "center",
+      alignItems: "stretch",
+    });
+    const node = store().document!.nodes[rootId];
+    expect(node.layout).toBe("flex");
+    expect(node.flexDirection).toBe("column");
+    expect(node.gap).toBe(16);
+    expect(node.justifyContent).toBe("center");
+    expect(node.alignItems).toBe("stretch");
+  });
+
+  it("drops the layout field when switched back to absolute (canonical = absent)", () => {
+    const rootId = store().document!.rootId;
+    store().setNodeLayout(rootId, { layout: "flex", gap: 8 });
+    store().setNodeLayout(rootId, { layout: "absolute" });
+    const node = store().document!.nodes[rootId];
+    expect(node.layout).toBeUndefined();
+    // Flex options are kept so toggling back restores the prior setup.
+    expect(node.gap).toBe(8);
+  });
+
+  it("is recorded as an undoable step", () => {
+    const rootId = store().document!.rootId;
+    store().setNodeLayout(rootId, { layout: "flex" });
+    expect(store().document!.nodes[rootId].layout).toBe("flex");
+    store().undo();
+    expect(store().document!.nodes[rootId].layout).toBeUndefined();
+  });
+});

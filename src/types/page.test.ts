@@ -12,6 +12,7 @@ import {
   makeSpacingTokenRef,
   resolveColor,
   resolveFrame,
+  resolveFlow,
   resolveHidden,
   resolveSpacing,
   sanitizeFontFamily,
@@ -21,6 +22,64 @@ import {
   toSides,
 } from "./page";
 import type { PageNode } from "./page";
+
+/** Minimal node for resolveFlow tests (only layout fields matter). */
+function flexNode(extra: Partial<PageNode> = {}): PageNode {
+  return {
+    id: "n",
+    type: "Layout",
+    props: {},
+    children: [],
+    frame: { x: 0, y: 0, w: 100, h: 100 },
+    ...extra,
+  };
+}
+
+describe("resolveFlow", () => {
+  it("returns null when the node is not in flex mode (default = absolute)", () => {
+    expect(resolveFlow(flexNode())).toBeNull();
+    expect(resolveFlow(flexNode({ layout: "absolute" }))).toBeNull();
+  });
+
+  it("maps enum fields to CSS keywords and wraps so children reflow", () => {
+    const flow = resolveFlow(
+      flexNode({
+        layout: "flex",
+        flexDirection: "column",
+        gap: 12,
+        alignItems: "center",
+        justifyContent: "between",
+      }),
+    );
+    expect(flow).toEqual({
+      flexDirection: "column",
+      flexWrap: "wrap",
+      gap: 12,
+      alignItems: "center",
+      justifyContent: "space-between",
+    });
+  });
+
+  it("defaults direction/align/justify and sanitizes gap (negative → 0)", () => {
+    const flow = resolveFlow(flexNode({ layout: "flex", gap: -5 }))!;
+    expect(flow.flexDirection).toBe("row");
+    expect(flow.alignItems).toBe("flex-start");
+    expect(flow.justifyContent).toBe("flex-start");
+    expect(flow.gap).toBe(0);
+  });
+
+  it("falls back to flex-start for an unknown enum (never injects)", () => {
+    const flow = resolveFlow(
+      flexNode({
+        layout: "flex",
+        alignItems: "evil; }" as unknown as "center",
+        justifyContent: "x" as unknown as "center",
+      }),
+    )!;
+    expect(flow.alignItems).toBe("flex-start");
+    expect(flow.justifyContent).toBe("flex-start");
+  });
+});
 
 describe("shadowCss", () => {
   it("returns undefined for no shadow", () => {
