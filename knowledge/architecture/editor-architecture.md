@@ -1,9 +1,9 @@
 ---
 type: Architecture
 title: 에디터 아키텍처 (5-zone)
-description: EditorShell이 제공하는 5-zone 레이아웃, DnD 흐름(절대배치·flex 자식 reorder), 스냅 시스템, 키보드 단축키.
+description: EditorShell이 제공하는 5-zone 레이아웃, DnD 흐름(절대배치·flex 자식 reorder, grid 자식은 reorder 불가), 스냅 시스템, 키보드 단축키.
 resource: src/app/EditorShell.tsx, src/routes/Editor.tsx, src/canvas/snap.ts, src/canvas/guideStore.ts, src/canvas/flowReorder.ts, src/canvas/flowDropStore.ts, src/components/NodeView.tsx
-tags: [editor, dnd, snap, architecture, flex, reorder, flow]
+tags: [editor, dnd, snap, architecture, flex, grid, reorder, flow]
 timestamp: 2026-06-30
 ---
 
@@ -95,10 +95,14 @@ type ActiveData =
 - `onDragOver`가 `resolveFlowDrag` 결과로 스토어를 갱신
 - `NodeView`가 구독해 호버 중인 형제 노드에 before/after 삽입선을 렌더
 
-### `NodeView.tsx` — flow 자식 DnD 활성화
+### `NodeView.tsx` — flow 자식 DnD 활성화 / grid 자식 DnD 비활성화
 
-- `useDraggable`: `disabled: isRoot`만 — 모든 비루트 노드(절대배치·flow 자식 포함)에서 활성화
-- `useDroppable`: `disabled: !container && !inFlow` — leaf 노드도 flow 자식이면 reorder 드롭 타깃으로 동작
+- `useDraggable`: `disabled: isRoot || inGrid` — **grid 자식은 드래그 비활성화**. 절대배치·flex 자식만 드래그 가능.
+- `useDroppable`: `disabled: !container && !inFlow` — leaf 노드도 flow 자식이면 reorder 드롭 타깃으로 동작.
+
+### grid 자식은 캔버스 reorder 불가 (Stage C-1 불변 조건)
+
+`resolveFlow(node)`는 `layout !== "flex"`면 항상 `null`을 반환한다. grid 컨테이너의 자식에 대해 `resolveFlowDrag`가 호출되어도 active 노드의 부모가 flex가 아니므로 reorder/reparent 결과를 반환하지 않는다(`null` 반환 → 드래그 무시). 즉 **flex 자식만 캔버스 드래그 재배치 대상**이며, grid 자식의 순서 변경은 LayerTree에서만 가능하다.
 
 ### export / 미리보기 자동 반영
 
