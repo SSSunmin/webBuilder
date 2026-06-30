@@ -125,7 +125,7 @@ tag === null     →  항상 새 스냅샷 (이산적 액션)
 | `moveNode(id, newParentId, position?)` | 다른 컨테이너로 reparent |
 | `reorderNode(id, "forward"\|"backward")` | 형제 순서에서 앞/뒤 이동 (스택 순서) |
 | `moveNodeInto(id, parentId)` | 컨테이너의 마지막 자식으로 이동 |
-| `moveNodeAdjacent(id, refId, "before"\|"after")` | refId 형제 앞/뒤에 삽입 |
+| `moveNodeAdjacent(id, refId, "before"\|"after")` | refId 형제 앞/뒤에 삽입 (children 배열 splice, 단일 출처). flex 자식 캔버스 reorder(Stage B)의 `resolveFlowDrag`가 이 액션을 호출한다. |
 
 ### 정렬·배분
 

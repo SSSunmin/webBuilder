@@ -2,6 +2,12 @@
 
 OKF 번들의 변경 이력. 최신 항목이 위. `/okf` 실행 시 knowledge-curator가 여기에 기록한다.
 
+## 2026-06-30 (#4 Stage B — flex 자식 캔버스 드래그 순서변경)
+
+- `architecture/editor-architecture.md`: `onDragOver` 섹션 신설(flowDropStore 갱신 역할), `onDragEnd`에 flex 자식 분기(reorder→`moveNodeAdjacent`/reparent→`moveNode`) 추가, "flex 자식 캔버스 DnD — Stage B" 섹션 신설(`resolveFlowDrag` 순수 함수·반환 케이스표·`flowDropStore` 삽입 인디케이터·`NodeView` 활성화 조건·export 자동 반영). frontmatter resource/tags/timestamp 갱신. 신규 의존성 0.
+- `store/editor-store.md`: `moveNodeAdjacent` 설명에 Stage B reorder 연결 한 줄 추가.
+- grid 배치·반응형 레이아웃은 Stage C 대기. 인터랙션 브라우저 QA는 아직 수동 완료 전(자율 구현 상태).
+
 ## 2026-06-30 (#1 Stage B2 — per-bp background 오버라이드)
 
 - `data-model/page-node.md`: `NodeOverride`에 `background?: string` 추가. 신규 `resolveBackground(node,bp)` 문서화 — `resolvePadding`/`resolveMargin`과 동일한 데스크톱-퍼스트 캐스케이드·통째 교체·tablet→mobile 상속 구조. 반환 raw 값(리터럴 색상 | `token:<key>` | undefined), 호출부가 `resolveColor(…,tokens)` 적용. frontmatter description/tags 갱신.

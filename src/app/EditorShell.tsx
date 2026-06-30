@@ -5,14 +5,23 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import type { Active, DragEndEvent, DragStartEvent, Over } from "@dnd-kit/core";
+import type {
+  Active,
+  DragEndEvent,
+  DragOverEvent,
+  DragStartEvent,
+  Over,
+} from "@dnd-kit/core";
 import { useEffect, useState } from "react";
 import { guideStore } from "../canvas/guideStore";
+import { flowDropStore } from "../canvas/flowDropStore";
+import { resolveFlowDrag } from "../canvas/flowReorder";
+import type { FlowRect } from "../canvas/flowReorder";
 import { createSnapModifier, snapBox } from "../canvas/snap";
 import type { Bounds, SnapBox } from "../canvas/snap";
 import { getBlockDef, getComponentDef } from "../registry";
 import { useEditorStore } from "../store/editorStore";
-import { toSides } from "../types/page";
+import { resolveFlow, toSides } from "../types/page";
 import type { PageNode } from "../types/page";
 import { GuideOverlay } from "../components/GuideOverlay";
 
@@ -71,6 +80,7 @@ export function EditorShell({ projectId }: EditorShellProps) {
   const addBlock = useEditorStore((s) => s.addBlock);
   const moveNode = useEditorStore((s) => s.moveNode);
   const moveNodeBy = useEditorStore((s) => s.moveNodeBy);
+  const moveNodeAdjacent = useEditorStore((s) => s.moveNodeAdjacent);
   const undo = useEditorStore((s) => s.undo);
   const redo = useEditorStore((s) => s.redo);
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
@@ -104,9 +114,40 @@ export function EditorShell({ projectId }: EditorShellProps) {
     }
   };
 
+  // dnd-kit ClientRect → the plain rect resolveFlowDrag expects.
+  const rectOf = (
+    r: { left: number; top: number; width: number; height: number } | null | undefined,
+  ): FlowRect | null => (r ? { x: r.left, y: r.top, w: r.width, h: r.height } : null);
+
+  // While dragging a flex (flow) child over a sibling, show where it would land.
+  const onDragOver = (e: DragOverEvent) => {
+    const data = e.active.data.current as ActiveData;
+    if (!data || !("nodeId" in data)) {
+      flowDropStore.clear();
+      return;
+    }
+    const nodes = useEditorStore.getState().document?.nodes ?? {};
+    const overNodeId = (e.over?.data.current as { nodeId?: string } | undefined)?.nodeId;
+    const action = resolveFlowDrag(
+      nodes,
+      data.nodeId,
+      overNodeId,
+      rectOf(e.active.rect.current.translated),
+      rectOf(e.over?.rect),
+    );
+    if (action?.kind === "reorder") {
+      const pid = parentOf(nodes, data.nodeId);
+      const dir = pid && resolveFlow(nodes[pid])?.flexDirection === "column" ? "column" : "row";
+      flowDropStore.set({ overId: action.refId, side: action.side, direction: dir });
+    } else {
+      flowDropStore.clear();
+    }
+  };
+
   const onDragEnd = (e: DragEndEvent) => {
     setActiveLabel(null);
     guideStore.clear();
+    flowDropStore.clear();
     const data = e.active.data.current as ActiveData;
     const overNodeId = (e.over?.data.current as { nodeId?: string } | undefined)?.nodeId;
 
@@ -127,6 +168,22 @@ export function EditorShell({ projectId }: EditorShellProps) {
     const node = nodes[id];
     if (!node) return;
     const currentParent = parentOf(nodes, id);
+
+    // Flex (flow) child: reorder among siblings, or append into another container
+    // — never absolute-reposition (frame position is meaningless in flow).
+    const parentFlow = currentParent ? resolveFlow(nodes[currentParent]) : null;
+    if (parentFlow) {
+      const action = resolveFlowDrag(
+        nodes,
+        id,
+        overNodeId,
+        rectOf(e.active.rect.current.translated),
+        rectOf(e.over?.rect),
+      );
+      if (action?.kind === "reorder") moveNodeAdjacent(action.id, action.refId, action.side);
+      else if (action?.kind === "reparent") moveNode(action.id, action.parentId);
+      return;
+    }
 
     // Reparent into a different container under the pointer.
     const reparent =
@@ -172,10 +229,12 @@ export function EditorShell({ projectId }: EditorShellProps) {
       sensors={sensors}
       modifiers={[snapModifier]}
       onDragStart={onDragStart}
+      onDragOver={onDragOver}
       onDragEnd={onDragEnd}
       onDragCancel={() => {
         setActiveLabel(null);
         guideStore.clear();
+        flowDropStore.clear();
       }}
     >
       <div className="grid min-h-screen grid-rows-[auto_1fr] bg-canvas text-ink lg:h-screen lg:grid-rows-[auto_minmax(0,1fr)] lg:overflow-hidden">

@@ -1,10 +1,10 @@
 ---
 type: Architecture
 title: 에디터 아키텍처 (5-zone)
-description: EditorShell이 제공하는 5-zone 레이아웃, DnD 흐름, 스냅 시스템, 키보드 단축키.
-resource: src/app/EditorShell.tsx, src/routes/Editor.tsx, src/canvas/snap.ts, src/canvas/guideStore.ts
-tags: [editor, dnd, snap, architecture]
-timestamp: 2026-06-22
+description: EditorShell이 제공하는 5-zone 레이아웃, DnD 흐름(절대배치·flex 자식 reorder), 스냅 시스템, 키보드 단축키.
+resource: src/app/EditorShell.tsx, src/routes/Editor.tsx, src/canvas/snap.ts, src/canvas/guideStore.ts, src/canvas/flowReorder.ts, src/canvas/flowDropStore.ts, src/components/NodeView.tsx
+tags: [editor, dnd, snap, architecture, flex, reorder, flow]
+timestamp: 2026-06-30
 ---
 
 # 에디터 아키텍처 (5-zone)
@@ -56,12 +56,53 @@ type ActiveData =
 - `palette` / `block` 종류면 `DragOverlay`에 라벨 표시
 - `nodeId` 종류(캔버스 노드 이동)면 오버레이 없음 — 실제 DOM 요소가 직접 이동하므로 스냅이 실제 크기 기준으로 동작
 
+### onDragOver
+
+`onDragOver`는 `resolveFlowDrag`를 호출해 결과를 `flowDropStore`에 기록한다(삽입 인디케이터 표시 전용, 상태 변경 없음).
+
 ### onDragEnd
 1. **palette** → `addNode(overNodeId, type, dropPosition)`
 2. **block** → `addBlock(overNodeId, blockKey, dropPosition)`
 3. **nodeId** (기존 노드):
-   - drop 대상이 다른 컨테이너면 **reparent**: `moveNode(id, newParentId, snappedPos)`
-   - 같은 부모 내 이동: `snapBox()` 계산 후 `moveNodeBy(id, dx, dy)`
+   - **active 노드가 flex(flow) 컨테이너의 자식**이면 → `resolveFlowDrag` 결과에 따라 분기 후 **return**(절대배치 경로로 폴백하지 않음):
+     - `{kind:"reorder", id, refId, side}` → `moveNodeAdjacent(id, refId, side)` (children 배열 splice)
+     - `{kind:"reparent", id, parentId}` → `moveNode(id, parentId)` (다른 flex 컨테이너로 append)
+     - `null` → 무시
+   - **그 외(절대배치 노드)**:
+     - drop 대상이 다른 컨테이너면 **reparent**: `moveNode(id, newParentId, snappedPos)`
+     - 같은 부모 내 이동: `snapBox()` 계산 후 `moveNodeBy(id, dx, dy)`
+
+## flex 자식 캔버스 DnD — Stage B (`src/canvas/flowReorder.ts`)
+
+신규 의존성 0 — 기존 `@dnd-kit/core` + 기존 `moveNodeAdjacent` 재사용.
+
+### `resolveFlowDrag(nodes, activeId, overId, activeRect, overRect)`
+
+순수 함수. active 노드가 flex(flow) 컨테이너(`layout === "flex"`)의 직속 자식일 때만 동작한다:
+
+| 케이스 | 반환 |
+|---|---|
+| overId가 **같은 flex 부모의 형제** | `{kind:"reorder", id, refId, side}` — `flowDropSide`로 주축 중심 비교해 `"before"` / `"after"` 결정 |
+| overId가 **다른 flex 컨테이너** | `{kind:"reparent", id, parentId}` — 해당 컨테이너에 append |
+| 그 외(비-flow 영역 등) | `null` — 호출부가 절대배치 경로로 폴백 |
+
+`flowDropSide(active, over, direction)`: `row` → x 중심 비교, `column` → y 중심 비교.
+
+### 삽입 인디케이터 (`src/canvas/flowDropStore.ts`)
+
+`guideStore` 패턴을 따르는 외부 pub/sub 스토어. 상태: `{overId, side, direction}`.
+
+- `onDragOver`가 `resolveFlowDrag` 결과로 스토어를 갱신
+- `NodeView`가 구독해 호버 중인 형제 노드에 before/after 삽입선을 렌더
+
+### `NodeView.tsx` — flow 자식 DnD 활성화
+
+- `useDraggable`: `disabled: isRoot`만 — 모든 비루트 노드(절대배치·flow 자식 포함)에서 활성화
+- `useDroppable`: `disabled: !container && !inFlow` — leaf 노드도 flow 자식이면 reorder 드롭 타깃으로 동작
+
+### export / 미리보기 자동 반영
+
+store·export 코어는 무변경. export·미리보기는 `node.children` 순서를 그대로 따르므로 `moveNodeAdjacent`로 변경된 순서가 자동 반영된다.
 
 ## 스냅 시스템 (`src/canvas/snap.ts`)
 
