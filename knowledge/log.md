@@ -2,6 +2,11 @@
 
 OKF 번들의 변경 이력. 최신 항목이 위. `/okf` 실행 시 knowledge-curator가 여기에 기록한다.
 
+## 2026-07-01 (#4 — @dnd-kit/sortable + DragOverlay flex reorder 전환)
+
+- `architecture/editor-architecture.md`: DnD 흐름 전면 갱신. `onDragOver`/`flowDropStore`/삽입 인디케이터/`resolveFlowDrag`/`flowDropSide` 관련 내용 제거. 대체 내용 추가: 스코프드 `collisionDetection`(`closestCenter`↔`rectIntersection` useCallback 메모이즈), DragOverlay+NodeOverlay 클론 패턴(소스 opacity:0→drop 시 clean reorder), `resolveFlowDrop` 순수 함수(index 기반 side 결정·FlowDrop 타입), `SortableContext`(flexDirection별 전략), `FlowNodeView`(useSortable+FLIP)/`StaticNodeView` 분리, `NodeView` 디스패처+`useNodeModel`+`renderChildContent`+`NodeBox` 구조, flow 자식 스냅 스킵(`active.data.current.flow` 체크). frontmatter description/resource/tags 갱신(`flowDropStore` resource 제거, `sortable`·`dragoverlay` 태그 추가).
+- `index.md`: 에디터 아키텍처 항목 설명에 sortable+DragOverlay·resolveFlowDrop·NodeView 분리 반영.
+
 ## 2026-07-01 (#4 Stage C-2 — per-breakpoint 레이아웃 파라미터 오버라이드)
 
 - `data-model/page-node.md`: frontmatter description을 v7(Stage C-2)로 갱신. `NodeOverride`에 레이아웃 파라미터 6개(`flexDirection`/`gridColumns`/`gridRows`/`gap`/`alignItems`/`justifyContent`) 추가 및 모드-stays-base 규칙(wrapper 구조적 이유) 명시. 신규 `resolveLayoutField<K>(node, bp, field)` 문서화(per-field 데스크톱-퍼스트 cascade, `resolvePadding`과 동일 구조). `resolveFlow`/`resolveGrid` 시그니처에 `bp: BreakpointId = "desktop"` 파라미터 추가 반영(하위호환, 비-desktop bp에서 `resolveLayoutField` 경유). A03: override 값도 동일 sanitize/enum 폴백 경로.

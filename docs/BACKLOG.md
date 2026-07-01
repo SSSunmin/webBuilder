@@ -12,7 +12,7 @@
 | 1 | 반응형 export 강건화 | 완료 (A·B1·B2) | frame/hidden 반응형(A) + per-bp padding/margin(B1)·background(B2) 오버라이드 |
 | 2 | 이벤트/액션 완성 | 완료 | submit·custom 액션을 실제 코드로 생성 |
 | 3 | 디자인 토큰/테마 | v2(색상·폰트·간격) 완료 | 문서 전역 색상·글꼴·간격 토큰 + 노드 참조 + export(:root/var) |
-| 4 | 레이아웃 모델(flex/grid) | A·C-1·C-2 완료 · B 구현(수동 QA 대기) | flex 컨테이너(A). B=flex 자식 캔버스 드래그 순서변경(삽입선). C-1=grid 컨테이너. C-2=per-bp 레이아웃 오버라이드(완료) |
+| 4 | 레이아웃 모델(flex/grid) | A·B·C-1·C-2 완료 | flex 컨테이너(A). B=flex 자식 드래그 순서변경(sortable+DragOverlay). C-1=grid 컨테이너. C-2=per-bp 레이아웃 오버라이드 |
 
 ---
 
@@ -206,7 +206,7 @@ export 코드도 동일하게 동작한다.
 - 부수: v2에서 누락됐던 `SnapBox.margin` 타입 갭(`Sides|string`) 보정.
 - 검증: typecheck·build 통과, 테스트 225개(`resolveFlow`·flex export·`setNodeLayout` +11).
 
-### Stage B — flex 자식 캔버스 드래그 순서변경  · 상태 구현 완료 · 수동 QA 대기
+### Stage B — flex 자식 캔버스 드래그 순서변경  · 상태 완료 (수동 QA 통과, 2026-07-01)
 
 **구현 완료 (2026-06-30, 브랜치 `task/4-flex-reorder`)** — 신규 의존성 0(기존 `@dnd-kit/core` +
 `moveNodeAdjacent` 재사용, LayerTreePane 패턴):
@@ -216,8 +216,16 @@ export 코드도 동일하게 동작한다.
 - `EditorShell`: `onDragOver`→인디케이터, `onDragEnd` flow 분기(reorder→`moveNodeAdjacent`/reparent→`moveNode`,
   절대배치 경로는 비-flow에만 → 회귀 0). store/export 코어 무변경(children 순서 자동 반영).
 - 검증(자동): lint 0 errors, build·typecheck 통과, 테스트 235개(`flowReorder` 순수 로직 9 + export 순서 1).
-- ⚠️ **수동 QA 대기**: 캔버스 드래그 인터랙션 자체(삽입선 위치·reorder 체감·R1 collisionDetection의
-  절대 드래그 간섭)는 자율 루프가 검증 불가 — 브라우저에서 시각 확인 후 머지. PR #에 명시.
+**수동 QA 통과 (2026-07-01, 브랜치 `task/4-flow-drag-indicator`)** — QA에서 두 문제 발견·해결:
+① 삽입선이 같은 형제 위에서 즉시 갱신 안 됨 ② **드롭 시 자식이 새 자리에서 깜빡임**(레이어트리로 같은
+순서변경을 하면 안 깜빡 → 원인은 순서변경/리렌더가 아니라 dnd-kit이 드롭 시 드래그 소스 요소를 처리하는
+것과 DOM 재배치의 충돌). 해법: 손으로 만든 flow reorder를 **@dnd-kit/sortable로 교체(FLIP 애니메이션)** +
+**DragOverlay**(드래그 중 소스는 `opacity:0`, 커서를 따라가는 클론을 렌더 → 드롭 시 소스는 레이어트리처럼
+clean 이동 → 깜빡임 0). 부수: 커스텀 삽입선 인프라(`flowDropStore`) 제거(sortable 라이브 자리벌림이 대체),
+`resolveFlowDrag`→`resolveFlowDrop`(children 인덱스로 before/after), 충돌판정 flow-스코프(`closestCenter`↔
+`rectIntersection`, 절대/팔레트 회귀 방지), flow 자식 snap skip, `NodeView` 분리(FlowNodeView/StaticNodeView/
+NodeBox/NodeOverlay). 회귀(절대 드래그·팔레트·reparent) 없음 육안 확인. 검증: tsc·eslint 0 errors·build·
+vitest 322(`resolveFlowDrop` 순수 로직 7 재작성). 상세 → `knowledge/architecture/editor-architecture.md`.
 
 **Stage C — C-1(grid) 완료 · C-2(per-bp 레이아웃 오버라이드) [대기]**.
 
