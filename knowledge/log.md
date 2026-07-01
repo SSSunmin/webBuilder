@@ -2,6 +2,14 @@
 
 OKF 번들의 변경 이력. 최신 항목이 위. `/okf` 실행 시 knowledge-curator가 여기에 기록한다.
 
+## 2026-07-01 (#4 Stage C-3 — flex↔grid per-breakpoint 레이아웃 모드 스왑)
+
+- `data-model/page-node.md`: frontmatter description/tags/timestamp를 v8(Stage C-3)로 갱신. `NodeOverride`에 `layout?: "flex" | "grid"` 추가(absolute 불가 이유 명시). 신규 `resolveLayoutMode(node, bp)` 문서화(flex/grid base에서만 tablet/mobile layout override 적용, absolute base는 무시, 데스크톱-퍼스트 cascade). `resolveFlow`/`resolveGrid` 게이트가 `resolveLayoutMode`로 교체된 점 반영. "resolve 함수" 섹션 제목을 C-3 포함으로 갱신.
+- `store/editor-store.md`: frontmatter description/tags/timestamp 갱신. `setNodeLayout` 설명에 C-3 라우팅 규칙 추가(bp≠desktop+base flex/grid+값 flex/grid → `overrides[bp].layout`). `clearOverrideField` field 유니온에 `"layout"` 추가.
+- `export/export-format.md`: frontmatter description/tags/timestamp 갱신. `.pg-N-c` 래퍼 섹션에 "per-bp override emit (C-2/C-3)" 서브섹션 신설 — `pushWrapperOverrideRules`의 mode 인자 제거·bp마다 모드 재해석·flex↔grid 스왑 시 올바른 full decl emit, `hasLayoutOverride`에 `ov.layout` 포함, flex→grid 스왑 `flex: 0 0 auto` punt 명문화.
+- `architecture/editor-architecture.md`: description/tags 갱신(C-3 모드 스왑, resolveLayoutMode 단일출처). "레이아웃 모드 per-bp 변경 불가" 항목을 "flex↔grid per-bp 모드 스왑(C-3)" 섹션으로 교체 — absolute↔flex/grid 불가 불변 조건은 유지하면서 스왑 가능 조건·setNodeLayout 라우팅·resolveLayoutMode 역할 정리. InspectorPane LayoutControl 모드 select `canSwapMode` 활성화 조건 추가.
+- `index.md`: data-model 항목에 C-3 변경(NodeOverride.layout, resolveLayoutMode, 게이트 교체) 반영.
+
 ## 2026-07-01 (#4 — @dnd-kit/sortable + DragOverlay flex reorder 전환)
 
 - `architecture/editor-architecture.md`: DnD 흐름 전면 갱신. `onDragOver`/`flowDropStore`/삽입 인디케이터/`resolveFlowDrag`/`flowDropSide` 관련 내용 제거. 대체 내용 추가: 스코프드 `collisionDetection`(`closestCenter`↔`rectIntersection` useCallback 메모이즈), DragOverlay+NodeOverlay 클론 패턴(소스 opacity:0→drop 시 clean reorder), `resolveFlowDrop` 순수 함수(index 기반 side 결정·FlowDrop 타입), `SortableContext`(flexDirection별 전략), `FlowNodeView`(useSortable+FLIP)/`StaticNodeView` 분리, `NodeView` 디스패처+`useNodeModel`+`renderChildContent`+`NodeBox` 구조, flow 자식 스냅 스킵(`active.data.current.flow` 체크). frontmatter description/resource/tags 갱신(`flowDropStore` resource 제거, `sortable`·`dragoverlay` 태그 추가).

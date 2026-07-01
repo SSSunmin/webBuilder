@@ -1,10 +1,10 @@
 ---
 type: Reference
 title: 에디터 스토어 (Zustand)
-description: useEditorStore 상태 구조, 전체 액션 목록, undo/redo coalescing 메커니즘, breakpoint 편집 모드. v2에서 글꼴·간격 토큰 액션 추가. v3(Stage A)에서 setNodeLayout 액션 추가. v4(Stage B1)에서 updateNodeSpacing/setNodeSpacingValue bp 인지화, clearOverrideField 신규, cloneOverrides 깊은 복사 확장, centerInParent bp 인지. v5(Stage B2)에서 setNodeBackground bp 인지화, clearOverrideField에 background 추가.
+description: useEditorStore 상태 구조, 전체 액션 목록, undo/redo coalescing 메커니즘, breakpoint 편집 모드. v2에서 글꼴·간격 토큰 액션 추가. v3(Stage A)에서 setNodeLayout 액션 추가. v4(Stage B1)에서 updateNodeSpacing/setNodeSpacingValue bp 인지화, clearOverrideField 신규, cloneOverrides 깊은 복사 확장, centerInParent bp 인지. v5(Stage B2)에서 setNodeBackground bp 인지화, clearOverrideField에 background 추가. v6(Stage C-3)에서 setNodeLayout이 layout을 bp 라우팅(desktop→base, bp≠desktop+base flex/grid이면 overrides[bp].layout), clearOverrideField field 유니온에 "layout" 추가.
 resource: src/store/editorStore.ts
-tags: [store, zustand, undo-redo, state, breakpoint, design-tokens, layout, flex, spacing, override, background]
-timestamp: 2026-06-30
+tags: [store, zustand, undo-redo, state, breakpoint, design-tokens, layout, flex, grid, spacing, override, background, layout-mode-swap]
+timestamp: 2026-07-01
 ---
 
 # 에디터 스토어 (Zustand)
@@ -89,7 +89,7 @@ tag === null     →  항상 새 스냅샷 (이산적 액션)
 | `moveNodeBy(id, dx, dy, tag?)` | null (기본) | 활성 bp 기준 resolve 후 이동 |
 | `setNodeBackground(id, bg)` | `bg:<id>` | background 색상 (리터럴 또는 `token:<key>` 참조 모두 가능). **bp 인지(Stage B2)**: desktop이면 `node.background`(base)에, 그 외면 `overrides[bp].background`에 저장(base + 형제 override 필드 보존). |
 | `setNodeRadius(id, r)` | `radius:<id>` | borderRadius (0 이상 정수로 클램프) |
-| `setNodeLayout(id, partial)` | `layout:<id>:<keys>` | 컨테이너 자식 배치 모드·flex 옵션 부분 갱신. `layout`이 `"flex"`가 아니면 `layout` 필드 자체를 삭제(canonical absolute = 필드 없음). flex 전용 옵션(`flexDirection`/`gap`/`alignItems`/`justifyContent`)은 absolute 전환 후에도 잔류 — 다시 flex로 토글하면 이전 설정 복원. |
+| `setNodeLayout(id, partial)` | `layout:<id>:<keys>` | 컨테이너 자식 배치 모드·flex/grid 옵션 부분 갱신. **Stage C-3 라우팅**: `layout` 키를 받을 때 desktop이면 base에 기록(absolute가 되면 `layout` 필드 삭제, canonical). bp≠desktop이고 base가 flex/grid이고 값이 flex/grid일 때만 `overrides[bp].layout`에 기록 — 그 외(absolute base 또는 absolute 값)는 무시. 파라미터(gap 등)는 bp에 따라 `overrides[bp]`에 기록(기존 C-2 동작 유지). |
 | `updateNodeShadow(id, partial)` | `shadow:<id>:<fields>` | 픽셀 그림자(ShadowSpec) 부분 병합 (없으면 DEFAULT_SHADOW 생성) |
 | `clearNodeShadow(id)` | null | 그림자 제거 (boxShadow → undefined) |
 | `updateNodeSpacing(id, {padding?, margin?})` | `spacing:...` | padding/margin 부분 업데이트. 토큰 참조 중인 노드는 resolve 후 Sides로 전환. **bp 인지(Stage B1)**: `activeBreakpoint`가 desktop이 아니면 `resolvePadding/resolveMargin`으로 해당 bp에서 resolved된 값을 seed해 **완전한 Sides**로 `overrides[bp]`에 기록(base + 형제 override 필드 보존). desktop 경로(base frame 직접 편집)는 기존 동작 유지. |
@@ -145,7 +145,7 @@ tag === null     →  항상 새 스냅샷 (이산적 액션)
 |---|---|
 | `setNodeHidden(id, bp, hidden)` | bp별 hidden 플래그 (desktop 불가) |
 | `resetOverride(id, bp)` | bp 오버라이드 전체 삭제 (desktop 불가). **B1 주의**: padding/margin override도 함께 삭제된다. 개별 필드만 해제하려면 `clearOverrideField`를 쓴다. |
-| `clearOverrideField(id, bp, field)` | **Stage B1 신규.** `field`("padding", "margin", **또는 "background"**(Stage B2 추가)) 하나만 bp override에서 삭제해 cascade 상속으로 되돌린다. desktop 호출은 no-op. override에 남은 필드가 없으면 해당 bp override 전체를 삭제해 메모리를 절약한다. undo 태그: `clearov:<id>:<bp>:<field>`. |
+| `clearOverrideField(id, bp, field)` | **Stage B1 신규.** `field`("padding", "margin", "background"(B2), "flexDirection"/"gridColumns"/"gridRows"/"gap"/"alignItems"/"justifyContent"(C-2), **"layout"(C-3 추가)**) 하나만 bp override에서 삭제해 cascade 상속으로 되돌린다. desktop 호출은 no-op. override에 남은 필드가 없으면 해당 bp override 전체를 삭제해 메모리를 절약한다. undo 태그: `clearov:<id>:<bp>:<field>`. |
 
 ### Undo / Redo
 
