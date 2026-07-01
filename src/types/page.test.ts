@@ -16,6 +16,7 @@ import {
   resolveFlow,
   resolveGrid,
   resolveHidden,
+  resolveLayoutMode,
   resolvePadding,
   resolveMargin,
   resolveSpacing,
@@ -217,6 +218,67 @@ describe("resolveGrid", () => {
       "repeat(1, minmax(0, 1fr))",
     );
     expect(resolveGrid(node, "mobile")!.gap).toBe(12);
+  });
+});
+
+describe("resolveLayoutMode (C-3 flex↔grid per-bp swap)", () => {
+  it("returns the base mode at every bp when there is no layout override", () => {
+    const node = flexNode({ layout: "flex" });
+    expect(resolveLayoutMode(node)).toBe("flex");
+    expect(resolveLayoutMode(node, "desktop")).toBe("flex");
+    expect(resolveLayoutMode(node, "tablet")).toBe("flex");
+    expect(resolveLayoutMode(node, "mobile")).toBe("flex");
+  });
+
+  it("swaps a flex base → grid at tablet, inheriting into mobile", () => {
+    const node = flexNode({ layout: "flex", overrides: { tablet: { layout: "grid" } } });
+    expect(resolveLayoutMode(node, "tablet")).toBe("grid");
+    expect(resolveGrid(node, "tablet")).not.toBeNull();
+    expect(resolveFlow(node, "tablet")).toBeNull();
+    // mobile inherits the tablet swap (desktop-first cascade)
+    expect(resolveLayoutMode(node, "mobile")).toBe("grid");
+    expect(resolveGrid(node, "mobile")).not.toBeNull();
+    // desktop base is unchanged
+    expect(resolveLayoutMode(node, "desktop")).toBe("flex");
+    expect(resolveFlow(node)).not.toBeNull();
+  });
+
+  it("swaps a grid base → flex at mobile only, keeping tablet as grid", () => {
+    const node = flexNode({
+      layout: "grid",
+      gridColumns: 2,
+      overrides: { mobile: { layout: "flex" } },
+    });
+    expect(resolveLayoutMode(node, "tablet")).toBe("grid");
+    expect(resolveGrid(node, "tablet")).not.toBeNull();
+    expect(resolveLayoutMode(node, "mobile")).toBe("flex");
+    expect(resolveFlow(node, "mobile")).not.toBeNull();
+    expect(resolveGrid(node, "mobile")).toBeNull();
+  });
+
+  it("ignores a stray layout override on an absolute base (no wrapper to swap)", () => {
+    const node = flexNode({ layout: "absolute", overrides: { tablet: { layout: "grid" } } });
+    expect(resolveLayoutMode(node, "tablet")).toBe("absolute");
+    expect(resolveFlow(node, "tablet")).toBeNull();
+    expect(resolveGrid(node, "tablet")).toBeNull();
+  });
+
+  it("keeps base-mode resolve for callers with no bp arg — regression guard", () => {
+    expect(resolveLayoutMode(flexNode({ layout: "flex" }))).toBe("flex");
+    expect(resolveLayoutMode(flexNode({ layout: "grid" }))).toBe("grid");
+    expect(resolveLayoutMode(flexNode())).toBe("absolute");
+    // a stray tablet override must NOT leak into the default (desktop) resolve
+    const node = flexNode({ layout: "flex", overrides: { tablet: { layout: "grid" } } });
+    expect(resolveFlow(node)).not.toBeNull();
+    expect(resolveGrid(node)).toBeNull();
+  });
+
+  it("reads the swapped mode's own params at that bp (flex→grid uses gridColumns)", () => {
+    const node = flexNode({
+      layout: "flex",
+      overrides: { tablet: { layout: "grid", gridColumns: 3 } },
+    });
+    expect(resolveGrid(node, "tablet")!.gridTemplateColumns).toBe("repeat(3, minmax(0, 1fr))");
   });
 });
 

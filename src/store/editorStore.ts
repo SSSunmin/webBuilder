@@ -194,7 +194,8 @@ interface EditorState {
       | "gridRows"
       | "gap"
       | "alignItems"
-      | "justifyContent",
+      | "justifyContent"
+      | "layout",
   ) => void;
   undo: () => void;
   redo: () => void;
@@ -543,15 +544,25 @@ export const useEditorStore = create<EditorState>((set, get) => {
           const { layout, ...params } = partial;
           let next: PageNode = { ...node };
           if (layout !== undefined) {
-            // why: layout mode controls whether the wrapper exists, so it stays base-only.
-            next.layout = layout;
-            if (next.layout !== "flex" && next.layout !== "grid") delete next.layout;
+            if (bp === "desktop") {
+              // Desktop is the base mode; canonical absolute = absent field.
+              next.layout = layout;
+              if (next.layout !== "flex" && next.layout !== "grid") delete next.layout;
+            } else if (
+              (layout === "flex" || layout === "grid") &&
+              (node.layout === "flex" || node.layout === "grid")
+            ) {
+              // why: only flex↔grid can swap per-bp — an absolute base has no wrapper
+              // div for @media to restyle, so absolute-base/absolute-value are ignored.
+              const prev = next.overrides?.[bp];
+              next = { ...next, overrides: { ...next.overrides, [bp]: { ...prev, layout } } };
+            }
           }
           if (Object.keys(params).length) {
             if (bp === "desktop") next = { ...next, ...params };
             else {
-              const prev = node.overrides?.[bp];
-              next = { ...next, overrides: { ...node.overrides, [bp]: { ...prev, ...params } } };
+              const prev = next.overrides?.[bp];
+              next = { ...next, overrides: { ...next.overrides, [bp]: { ...prev, ...params } } };
             }
           }
           return next;

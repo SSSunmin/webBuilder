@@ -106,7 +106,8 @@ function hasLayoutOverride(node: PageNode, bp: Exclude<BreakpointId, "desktop">)
   const ov = node.overrides?.[bp];
   return !!(
     ov &&
-    (ov.flexDirection !== undefined ||
+    (ov.layout !== undefined ||
+      ov.flexDirection !== undefined ||
       ov.gridColumns !== undefined ||
       ov.gridRows !== undefined ||
       ov.gap !== undefined ||
@@ -115,19 +116,14 @@ function hasLayoutOverride(node: PageNode, bp: Exclude<BreakpointId, "desktop">)
   );
 }
 
-function pushWrapperOverrideRules(
-  acc: CssAccum,
-  cls: string,
-  node: PageNode,
-  mode: "flex" | "grid",
-): void {
+function pushWrapperOverrideRules(acc: CssAccum, cls: string, node: PageNode): void {
   for (const bp of ["tablet", "mobile"] as const) {
     if (!hasLayoutOverride(node, bp)) continue;
-    const resolved = mode === "flex" ? resolveFlow(node, bp) : resolveGrid(node, bp);
-    const decls =
-      mode === "flex"
-        ? resolved && flowDecls(resolved as ResolvedFlow, true)
-        : resolved && gridDecls(resolved as ResolvedGrid, true);
+    // Resolve the MODE at this bp — a flex↔grid swap changes which resolver applies —
+    // then emit the full rule (forceResets) so the media block beats the base wrapper.
+    const flow = resolveFlow(node, bp);
+    const grid = flow ? null : resolveGrid(node, bp);
+    const decls = flow ? flowDecls(flow, true) : grid ? gridDecls(grid, true) : null;
     // why: wrapper layout lives on `.pg-N-c`, not `.pg-N`; emit the full rule so media order wins.
     if (decls) acc[bp].push(`.${cls} { ${decls.join("; ")}; }`);
   }
@@ -144,6 +140,10 @@ function baseDecls(
   inGrid: boolean,
 ): string[] {
   const f = node.frame;
+  // inFlow children get `flex: 0 0 auto` (fixed size); inGrid children omit it (inert
+  // in a grid). ponytail: a per-bp grid→flex mode swap (C-3) leaves a grid child
+  // without it, so as a flex-item it can shrink — accepted punt (children carry a
+  // fixed width and flex-wrap handles overflow). flex→grid is harmless (inert in grid).
   const parts = isRoot
     ? ["position: relative", `width: ${f.w}px`, `height: ${f.h}px`, "margin: 0 auto"]
     : inGrid
@@ -372,7 +372,8 @@ function renderNode(
   const def = getComponentDef(node.type);
   const isContainer = def?.isContainer ?? true;
   // A flex container flows its children (relative, wrapping) instead of placing
-  // them absolutely — mirrors the canvas (NodeView).
+  // them absolutely — mirrors the canvas (NodeView). These are the desktop BASE
+  // mode (no bp arg); per-bp flex↔grid swaps are emitted by pushWrapperOverrideRules.
   const flow = isContainer ? resolveFlow(node) : null;
   const grid = isContainer ? resolveGrid(node) : null;
   // Unknown type (imported JSON / swapped registry): keep the node and its
@@ -389,12 +390,12 @@ function renderNode(
   if (flow && childrenBlock) {
     const fcls = `${cls}-c`;
     acc.base.push(`.${fcls} { ${flowDecls(flow).join("; ")}; }`);
-    pushWrapperOverrideRules(acc, fcls, node, "flex");
+    pushWrapperOverrideRules(acc, fcls, node);
     childrenBlock = `<div className="${fcls}">\n${indentBlock(childrenBlock, 2)}\n</div>`;
   } else if (grid && childrenBlock) {
     const fcls = `${cls}-c`;
     acc.base.push(`.${fcls} { ${gridDecls(grid).join("; ")}; }`);
-    pushWrapperOverrideRules(acc, fcls, node, "grid");
+    pushWrapperOverrideRules(acc, fcls, node);
     childrenBlock = `<div className="${fcls}">\n${indentBlock(childrenBlock, 2)}\n</div>`;
   }
   const inner = def

@@ -362,6 +362,68 @@ describe("responsive media queries", () => {
     expect(tabletLine).toContain("flex");
     expect(tabletLine).toContain("gap 12");
   });
+
+  // --- C-3: flex↔grid MODE swap per breakpoint ---
+  it("swaps a flex base to grid at tablet on the wrapper class (C-3)", () => {
+    const code = generateCode(
+      docWithLayoutOverride({ layout: "flex", gap: 4 }, { tablet: { layout: "grid", gridColumns: 2 } }),
+    );
+    expect(code).toContain("@media (max-width: 768px)");
+    const tabletStart = code.indexOf("@media (max-width: 768px)");
+    expect(code.slice(tabletStart)).toContain(
+      ".pg-0-c { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))",
+    );
+    // base wrapper is still flex (desktop mode unchanged)
+    expect(code.slice(0, tabletStart)).toContain(".pg-0-c { display: flex");
+  });
+
+  it("swaps a grid base to flex at mobile on the wrapper class (C-3)", () => {
+    const code = generateCode(
+      docWithLayoutOverride({ layout: "grid", gridColumns: 3 }, { mobile: { layout: "flex" } }),
+    );
+    expect(code).toContain("@media (max-width: 375px)");
+    const mobileStart = code.indexOf("@media (max-width: 375px)");
+    expect(code.slice(mobileStart)).toContain(".pg-0-c { display: flex");
+  });
+
+  it("emits a wrapper media rule for a mode-only swap with no param overrides (C-3)", () => {
+    const code = generateCode(
+      docWithLayoutOverride({ layout: "flex" }, { tablet: { layout: "grid" } }),
+    );
+    expect(code).toContain("@media (max-width: 768px)");
+    const tabletStart = code.indexOf("@media (max-width: 768px)");
+    expect(code.slice(tabletStart)).toContain(".pg-0-c { display: grid");
+  });
+
+  it("emits no wrapper media rule without a layout override (C-3 regression)", () => {
+    const code = generateCode(docWithLayoutOverride({ layout: "flex", gap: 4 }, {}));
+    expect(code).not.toContain("@media");
+    expect(code).toContain(".pg-0-c { display: flex");
+  });
+
+  it("sanitizes injected params read by a swapped mode (A03) (C-3)", () => {
+    const unsafe = "1); } body { color: red";
+    const code = generateCode(
+      docWithLayoutOverride(
+        { layout: "flex", gap: 8 },
+        { tablet: { layout: "grid", gridColumns: unsafe as unknown as number } },
+      ),
+    );
+    expect(code).not.toContain(unsafe);
+    const tabletStart = code.indexOf("@media (max-width: 768px)");
+    expect(code.slice(tabletStart)).toContain(
+      ".pg-0-c { display: grid; grid-template-columns: repeat(1, minmax(0, 1fr))",
+    );
+  });
+
+  it("spec summarizes a swapped mode at the breakpoint (flex base → grid) (C-3)", () => {
+    const spec = generateSpec(
+      docWithLayoutOverride({ layout: "flex", gap: 4 }, { tablet: { layout: "grid", gridColumns: 2 } }),
+    );
+    const tabletLine = spec.split("\n").find((line) => line.includes("태블릿:"));
+    expect(tabletLine).toContain("grid");
+    expect(tabletLine).toContain("2열");
+  });
 });
 
 describe("event bindings", () => {

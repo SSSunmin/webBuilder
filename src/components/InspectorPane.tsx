@@ -17,6 +17,7 @@ import {
   resolveFrame,
   resolveHidden,
   resolveLayoutField,
+  resolveLayoutMode,
   resolveMargin,
   resolvePadding,
   spacingTokenKey,
@@ -170,6 +171,7 @@ const FLEX_ALIGN: { value: FlowAlign; label: string }[] = [
 ];
 
 type LayoutField =
+  | "layout"
   | "flexDirection"
   | "gridColumns"
   | "gridRows"
@@ -235,10 +237,16 @@ function LayoutControl({
   ) => void;
   onClearOverride: (field: LayoutField) => void;
 }) {
-  const flex = node.layout === "flex";
-  const grid = node.layout === "grid";
-  const layoutValue = flex || grid ? node.layout : "absolute";
+  // Mode is bp-aware (C-3 flex↔grid swap): show the mode resolved at this bp so
+  // the params below (flex vs grid controls) match what the canvas renders.
+  const mode = resolveLayoutMode(node, bp);
+  const flex = mode === "flex";
+  const grid = mode === "grid";
+  const layoutValue = flex || grid ? mode : "absolute";
   const isCustomBp = bp !== "desktop";
+  // Only a flex/grid base can swap mode per-bp (absolute has no wrapper div).
+  const baseMode = node.layout === "flex" || node.layout === "grid" ? node.layout : "absolute";
+  const canSwapMode = isCustomBp && baseMode !== "absolute";
   const overridden = (field: LayoutField) =>
     isCustomBp && node.overrides?.[bp]?.[field] !== undefined;
   const clear = (field: LayoutField) => () => onClearOverride(field);
@@ -252,18 +260,30 @@ function LayoutControl({
   return (
     <div className="flex flex-col gap-2">
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-muted">자식 배치</span>
+        {canSwapMode ? (
+          <LayoutFieldLabel
+            label="자식 배치"
+            overridden={overridden("layout")}
+            onClearOverride={clear("layout")}
+          />
+        ) : (
+          <span className="text-xs font-medium text-muted">자식 배치</span>
+        )}
         <select
           className={inputCls}
           value={layoutValue}
-          disabled={isCustomBp}
+          disabled={isCustomBp && !canSwapMode}
           onChange={(e) => onChange({ layout: e.target.value as PageNode["layout"] })}
         >
+          {/* absolute↔flex/grid can't swap per-bp (wrapper DOM), so a swappable bp
+              offers only the flex/grid alternatives. */}
+          {!canSwapMode && <option value="absolute">자유 배치 (좌표)</option>}
           <option value="grid">Grid (자동 배치)</option>
-          <option value="absolute">자유 배치 (좌표)</option>
           <option value="flex">Flex (자동 흐름)</option>
         </select>
-        {isCustomBp && <span className="text-[11px] text-muted">모드는 데스크탑 기준</span>}
+        {isCustomBp && !canSwapMode && (
+          <span className="text-[11px] text-muted">모드는 데스크탑 기준</span>
+        )}
       </label>
       {(flex || grid) && (
         <div className="flex flex-col gap-2 rounded-button border border-line2 p-2">
