@@ -1025,4 +1025,70 @@ describe("setNodeLayout", () => {
     store().undo();
     expect(store().document!.nodes[rootId].layout).toBeUndefined();
   });
+
+  it("writes gap edits at tablet to overrides without changing base", () => {
+    const rootId = store().document!.rootId;
+    store().setNodeLayout(rootId, { layout: "flex", gap: 4 });
+    store().setBreakpoint("tablet");
+    store().setNodeLayout(rootId, { gap: 12 });
+    const node = store().document!.nodes[rootId];
+    expect(node.gap).toBe(4);
+    expect(node.overrides?.tablet?.gap).toBe(12);
+  });
+
+  it("writes flexDirection edits at mobile to overrides", () => {
+    const rootId = store().document!.rootId;
+    store().setNodeLayout(rootId, { layout: "flex", flexDirection: "row" });
+    store().setBreakpoint("mobile");
+    store().setNodeLayout(rootId, { flexDirection: "column" });
+    const node = store().document!.nodes[rootId];
+    expect(node.flexDirection).toBe("row");
+    expect(node.overrides?.mobile?.flexDirection).toBe("column");
+  });
+
+  it("writes gridColumns edits at tablet to overrides", () => {
+    const rootId = store().document!.rootId;
+    store().setNodeLayout(rootId, { layout: "grid", gridColumns: 3 });
+    store().setBreakpoint("tablet");
+    store().setNodeLayout(rootId, { gridColumns: 2 });
+    const node = store().document!.nodes[rootId];
+    expect(node.gridColumns).toBe(3);
+    expect(node.overrides?.tablet?.gridColumns).toBe(2);
+  });
+
+  it("desktop parameter edits still write base", () => {
+    const rootId = store().document!.rootId;
+    store().setNodeLayout(rootId, { layout: "flex", gap: 10 });
+    const node = store().document!.nodes[rootId];
+    expect(node.gap).toBe(10);
+    expect(node.overrides).toBeUndefined();
+  });
+
+  it("routes mode changes to base even when tablet is active", () => {
+    const rootId = store().document!.rootId;
+    store().setBreakpoint("tablet");
+    store().setNodeLayout(rootId, { layout: "grid" });
+    const node = store().document!.nodes[rootId];
+    expect(node.layout).toBe("grid");
+    expect("layout" in (node.overrides?.tablet ?? {})).toBe(false);
+  });
+
+  it("clearOverrideField removes a layout override and drops the empty bp override", () => {
+    const rootId = store().document!.rootId;
+    store().setNodeLayout(rootId, { layout: "flex", gap: 4 });
+    store().setBreakpoint("tablet");
+    store().setNodeLayout(rootId, { gap: 12 });
+    store().clearOverrideField(rootId, "tablet", "gap");
+    expect(store().document!.nodes[rootId].overrides?.tablet).toBeUndefined();
+  });
+
+  it("duplicateNode copies layout overrides", () => {
+    const id = addAt(0, 0, 100, 100);
+    store().setNodeLayout(id, { layout: "flex", gap: 4 });
+    store().setBreakpoint("tablet");
+    store().setNodeLayout(id, { gap: 12, flexDirection: "column" });
+    const dup = store().duplicateNode(id)!;
+    expect(store().document!.nodes[dup].overrides?.tablet?.gap).toBe(12);
+    expect(store().document!.nodes[dup].overrides?.tablet?.flexDirection).toBe("column");
+  });
 });

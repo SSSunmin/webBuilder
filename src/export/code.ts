@@ -73,7 +73,7 @@ function spacingDecl(
 /** CSS declarations for a flex container's child wrapper. Children wrap so a
  * narrower container reflows them; values come from resolveFlow (gap sanitized,
  * enums mapped to fixed keywords) so nothing here can break out of the block. */
-function flowDecls(flow: ResolvedFlow): string[] {
+function flowDecls(flow: ResolvedFlow, forceResets = false): string[] {
   const parts = [
     "display: flex",
     `flex-direction: ${flow.flexDirection}`,
@@ -82,12 +82,12 @@ function flowDecls(flow: ResolvedFlow): string[] {
     "height: 100%",
     "box-sizing: border-box",
   ];
-  if (flow.gap) parts.push(`gap: ${flow.gap}px`);
+  if (flow.gap || forceResets) parts.push(`gap: ${flow.gap}px`);
   parts.push(`align-items: ${flow.alignItems}`, `justify-content: ${flow.justifyContent}`);
   return parts;
 }
 
-function gridDecls(grid: ResolvedGrid): string[] {
+function gridDecls(grid: ResolvedGrid, forceResets = false): string[] {
   const parts = [
     "display: grid",
     `grid-template-columns: ${grid.gridTemplateColumns}`,
@@ -96,9 +96,41 @@ function gridDecls(grid: ResolvedGrid): string[] {
     "box-sizing: border-box",
   ];
   if (grid.gridTemplateRows) parts.push(`grid-template-rows: ${grid.gridTemplateRows}`);
-  if (grid.gap) parts.push(`gap: ${grid.gap}px`);
+  else if (forceResets) parts.push("grid-template-rows: none");
+  if (grid.gap || forceResets) parts.push(`gap: ${grid.gap}px`);
   parts.push(`align-items: ${grid.alignItems}`, `justify-content: ${grid.justifyContent}`);
   return parts;
+}
+
+function hasLayoutOverride(node: PageNode, bp: Exclude<BreakpointId, "desktop">): boolean {
+  const ov = node.overrides?.[bp];
+  return !!(
+    ov &&
+    (ov.flexDirection !== undefined ||
+      ov.gridColumns !== undefined ||
+      ov.gridRows !== undefined ||
+      ov.gap !== undefined ||
+      ov.alignItems !== undefined ||
+      ov.justifyContent !== undefined)
+  );
+}
+
+function pushWrapperOverrideRules(
+  acc: CssAccum,
+  cls: string,
+  node: PageNode,
+  mode: "flex" | "grid",
+): void {
+  for (const bp of ["tablet", "mobile"] as const) {
+    if (!hasLayoutOverride(node, bp)) continue;
+    const resolved = mode === "flex" ? resolveFlow(node, bp) : resolveGrid(node, bp);
+    const decls =
+      mode === "flex"
+        ? resolved && flowDecls(resolved as ResolvedFlow, true)
+        : resolved && gridDecls(resolved as ResolvedGrid, true);
+    // why: wrapper layout lives on `.pg-N-c`, not `.pg-N`; emit the full rule so media order wins.
+    if (decls) acc[bp].push(`.${cls} { ${decls.join("; ")}; }`);
+  }
 }
 
 /** Base (desktop) CSS declarations for a node's frame + box styling. `inFlow` =
@@ -357,10 +389,12 @@ function renderNode(
   if (flow && childrenBlock) {
     const fcls = `${cls}-c`;
     acc.base.push(`.${fcls} { ${flowDecls(flow).join("; ")}; }`);
+    pushWrapperOverrideRules(acc, fcls, node, "flex");
     childrenBlock = `<div className="${fcls}">\n${indentBlock(childrenBlock, 2)}\n</div>`;
   } else if (grid && childrenBlock) {
     const fcls = `${cls}-c`;
     acc.base.push(`.${fcls} { ${gridDecls(grid).join("; ")}; }`);
+    pushWrapperOverrideRules(acc, fcls, node, "grid");
     childrenBlock = `<div className="${fcls}">\n${indentBlock(childrenBlock, 2)}\n</div>`;
   }
   const inner = def

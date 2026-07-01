@@ -87,6 +87,59 @@ describe("resolveFlow", () => {
   it("returns null for a grid node so flex drag-reorder does not run", () => {
     expect(resolveFlow(flexNode({ layout: "grid" }))).toBeNull();
   });
+
+  it("cascades tablet layout overrides into mobile, with mobile winning", () => {
+    const node = flexNode({
+      layout: "flex",
+      flexDirection: "row",
+      gap: 4,
+      overrides: {
+        tablet: { flexDirection: "column", gap: 12 },
+        mobile: { gap: 2 },
+      },
+    });
+    expect(resolveFlow(node, "tablet")!.flexDirection).toBe("column");
+    expect(resolveFlow(node, "tablet")!.gap).toBe(12);
+    expect(resolveFlow(node, "mobile")!.flexDirection).toBe("column");
+    expect(resolveFlow(node, "mobile")!.gap).toBe(2);
+  });
+
+  it("keeps base layout when no override exists and default bp arg is desktop", () => {
+    const node = flexNode({ layout: "flex", flexDirection: "column", gap: 8 });
+    expect(resolveFlow(node, "mobile")).toEqual(resolveFlow(node));
+    expect(resolveFlow(node)).toEqual(resolveFlow(node, "desktop"));
+  });
+
+  it("falls back for an unknown enum in a layout override", () => {
+    const flow = resolveFlow(
+      flexNode({
+        layout: "flex",
+        overrides: {
+          tablet: {
+            alignItems: "evil; }" as unknown as "center",
+            justifyContent: "x" as unknown as "center",
+          },
+        },
+      }),
+      "tablet",
+    )!;
+    expect(flow.alignItems).toBe("flex-start");
+    expect(flow.justifyContent).toBe("flex-start");
+  });
+
+  it("keeps layout overrides independent per field", () => {
+    const flow = resolveFlow(
+      flexNode({
+        layout: "flex",
+        flexDirection: "column",
+        gap: 4,
+        overrides: { tablet: { gap: 20 } },
+      }),
+      "tablet",
+    )!;
+    expect(flow.flexDirection).toBe("column");
+    expect(flow.gap).toBe(20);
+  });
 });
 
 describe("resolveGrid", () => {
@@ -145,6 +198,25 @@ describe("resolveGrid", () => {
     )!;
     expect(grid.alignItems).toBe("stretch");
     expect(grid.justifyContent).toBe("flex-start");
+  });
+
+  it("cascades grid layout overrides and sanitizes injected counts", () => {
+    const node = flexNode({
+      layout: "grid",
+      gridColumns: 3,
+      gap: 4,
+      overrides: {
+        tablet: { gridColumns: 2, gap: 12 },
+        mobile: { gridColumns: "4); } body {" as unknown as number },
+      },
+    });
+    expect(resolveGrid(node, "tablet")!.gridTemplateColumns).toBe(
+      "repeat(2, minmax(0, 1fr))",
+    );
+    expect(resolveGrid(node, "mobile")!.gridTemplateColumns).toBe(
+      "repeat(1, minmax(0, 1fr))",
+    );
+    expect(resolveGrid(node, "mobile")!.gap).toBe(12);
   });
 });
 

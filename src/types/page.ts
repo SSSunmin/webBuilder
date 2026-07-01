@@ -106,6 +106,12 @@ export interface NodeOverride {
   padding?: Sides | string;
   margin?: Sides | string;
   background?: string;
+  flexDirection?: "row" | "column";
+  gridColumns?: number;
+  gridRows?: number;
+  gap?: number;
+  alignItems?: FlowAlign;
+  justifyContent?: FlowJustify;
 }
 
 /** How a container arranges its children. Absent/"absolute" (the default and the
@@ -263,6 +269,27 @@ export function resolveBackground(node: PageNode, bp: BreakpointId): string | un
   return v;
 }
 
+export function resolveLayoutField<
+  K extends
+    | "flexDirection"
+    | "gridColumns"
+    | "gridRows"
+    | "gap"
+    | "alignItems"
+    | "justifyContent",
+>(node: PageNode, bp: BreakpointId, field: K): PageNode[K] {
+  let v = node[field];
+  if (bp === "tablet" || bp === "mobile") {
+    const t = node.overrides?.tablet?.[field];
+    if (t !== undefined) v = t as PageNode[K];
+  }
+  if (bp === "mobile") {
+    const m = node.overrides?.mobile?.[field];
+    if (m !== undefined) v = m as PageNode[K];
+  }
+  return v;
+}
+
 // --- Design tokens --------------------------------------------------------
 // A node references a token by storing `token:<key>` in a field instead of a
 // literal value: background → color tokens, padding/margin → spacing tokens.
@@ -399,14 +426,15 @@ export interface ResolvedFlow {
   justifyContent: string;
 }
 
-export function resolveFlow(node: PageNode): ResolvedFlow | null {
+export function resolveFlow(node: PageNode, bp: BreakpointId = "desktop"): ResolvedFlow | null {
   if (node.layout !== "flex") return null;
   return {
-    flexDirection: node.flexDirection === "column" ? "column" : "row",
+    flexDirection: resolveLayoutField(node, bp, "flexDirection") === "column" ? "column" : "row",
     flexWrap: "wrap",
-    gap: sanitizeSpacing(node.gap) ?? 0,
-    alignItems: ALIGN_CSS[node.alignItems as FlowAlign] ?? "flex-start",
-    justifyContent: JUSTIFY_CSS[node.justifyContent as FlowJustify] ?? "flex-start",
+    gap: sanitizeSpacing(resolveLayoutField(node, bp, "gap")) ?? 0,
+    alignItems: ALIGN_CSS[resolveLayoutField(node, bp, "alignItems") as FlowAlign] ?? "flex-start",
+    justifyContent:
+      JUSTIFY_CSS[resolveLayoutField(node, bp, "justifyContent") as FlowJustify] ?? "flex-start",
   };
 }
 
@@ -419,18 +447,19 @@ export interface ResolvedGrid {
   justifyContent: string;
 }
 
-export function resolveGrid(node: PageNode): ResolvedGrid | null {
+export function resolveGrid(node: PageNode, bp: BreakpointId = "desktop"): ResolvedGrid | null {
   if (node.layout !== "grid") return null;
   // why: counts are coerced to integers (>=1), so `repeat(N, ...)` can't inject (A03).
-  const cols = Math.max(1, sanitizeSpacing(node.gridColumns) ?? 1);
-  const rows = sanitizeSpacing(node.gridRows);
+  const cols = Math.max(1, sanitizeSpacing(resolveLayoutField(node, bp, "gridColumns")) ?? 1);
+  const rows = sanitizeSpacing(resolveLayoutField(node, bp, "gridRows"));
   return {
     columns: cols,
     gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
     gridTemplateRows: rows && rows > 0 ? `repeat(${rows}, minmax(0, 1fr))` : null,
-    gap: sanitizeSpacing(node.gap) ?? 0,
-    alignItems: ALIGN_CSS[node.alignItems as FlowAlign] ?? "stretch",
-    justifyContent: JUSTIFY_CSS[node.justifyContent as FlowJustify] ?? "flex-start",
+    gap: sanitizeSpacing(resolveLayoutField(node, bp, "gap")) ?? 0,
+    alignItems: ALIGN_CSS[resolveLayoutField(node, bp, "alignItems") as FlowAlign] ?? "stretch",
+    justifyContent:
+      JUSTIFY_CSS[resolveLayoutField(node, bp, "justifyContent") as FlowJustify] ?? "flex-start",
   };
 }
 

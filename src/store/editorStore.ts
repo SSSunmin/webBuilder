@@ -185,7 +185,16 @@ interface EditorState {
   clearOverrideField: (
     id: string,
     bp: BreakpointId,
-    field: "padding" | "margin" | "background",
+    field:
+      | "padding"
+      | "margin"
+      | "background"
+      | "flexDirection"
+      | "gridColumns"
+      | "gridRows"
+      | "gap"
+      | "alignItems"
+      | "justifyContent",
   ) => void;
   undo: () => void;
   redo: () => void;
@@ -255,6 +264,7 @@ function cloneOverrides(
         : {}),
       // background is a string — already copied by ...ov above; add an explicit
       // deep-clone here if it ever becomes an object (e.g. a gradient spec).
+      // C-2 layout overrides are primitives and are also carried by ...ov.
     };
   }
   return out;
@@ -525,20 +535,32 @@ export const useEditorStore = create<EditorState>((set, get) => {
       );
     },
 
-    setNodeLayout: (id, partial) =>
+    setNodeLayout: (id, partial) => {
+      const bp = get().activeBreakpoint;
       patchNode(
         id,
         (node) => {
-          const next: PageNode = { ...node, ...partial };
-          // Canonical absolute = no layout field (matches pre-flex documents).
-          // Flex/grid options are kept so toggling back restores the prior setup.
-          if (next.layout !== "flex" && next.layout !== "grid") delete next.layout;
+          const { layout, ...params } = partial;
+          let next: PageNode = { ...node };
+          if (layout !== undefined) {
+            // why: layout mode controls whether the wrapper exists, so it stays base-only.
+            next.layout = layout;
+            if (next.layout !== "flex" && next.layout !== "grid") delete next.layout;
+          }
+          if (Object.keys(params).length) {
+            if (bp === "desktop") next = { ...next, ...params };
+            else {
+              const prev = node.overrides?.[bp];
+              next = { ...next, overrides: { ...node.overrides, [bp]: { ...prev, ...params } } };
+            }
+          }
           return next;
         },
         // Coalesce edits to the same control (e.g. dragging the gap number),
         // but keep direction/align/justify as their own undo steps.
         `layout:${id}:${Object.keys(partial).join(",")}`,
-      ),
+      );
+    },
 
     setColorToken: (key, value) => {
       if (!isValidTokenKey(key)) return;

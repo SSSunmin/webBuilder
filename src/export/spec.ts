@@ -49,6 +49,10 @@ function overrideLines(
     if (ov.padding !== undefined) parts.push(`pad ${spacingField(ov.padding, tokens) ?? "0"}`);
     if (ov.margin !== undefined) parts.push(`margin ${spacingField(ov.margin, tokens) ?? "0"}`);
     if (ov.background !== undefined) parts.push(bgSummary(ov.background, tokens));
+    if (hasLayoutOverride(node, bp.id)) {
+      const layout = flowSummary(node, bp.id) ?? gridSummary(node, bp.id);
+      if (layout) parts.push(layout);
+    }
     if (parts.length) lines.push(`${indent}- ${bp.label}: ${parts.join(", ")}`);
   }
   return lines;
@@ -113,8 +117,21 @@ function bgSummary(bg: string, tokens: DocumentTokens | undefined): string {
 
 /** Describe a flex container's layout, e.g. "flex 가로, gap 8, 가운데", or null
  * when the node isn't a flex container. */
-function flowSummary(node: PageNode): string | null {
-  const flow = resolveFlow(node);
+function hasLayoutOverride(node: PageNode, bp: Exclude<BreakpointId, "desktop">): boolean {
+  const ov = node.overrides?.[bp];
+  return !!(
+    ov &&
+    (ov.flexDirection !== undefined ||
+      ov.gridColumns !== undefined ||
+      ov.gridRows !== undefined ||
+      ov.gap !== undefined ||
+      ov.alignItems !== undefined ||
+      ov.justifyContent !== undefined)
+  );
+}
+
+function flowSummary(node: PageNode, bp: BreakpointId = "desktop"): string | null {
+  const flow = resolveFlow(node, bp);
   if (!flow) return null;
   const parts = [`flex ${flow.flexDirection === "column" ? "세로" : "가로"}`];
   if (flow.gap) parts.push(`gap ${flow.gap}`);
@@ -123,8 +140,8 @@ function flowSummary(node: PageNode): string | null {
   return parts.join(", ");
 }
 
-function gridSummary(node: PageNode): string | null {
-  const grid = resolveGrid(node);
+function gridSummary(node: PageNode, bp: BreakpointId = "desktop"): string | null {
+  const grid = resolveGrid(node, bp);
   if (!grid) return null;
   const cols = grid.columns;
   const parts = [`grid ${cols}열`];

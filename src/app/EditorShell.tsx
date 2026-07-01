@@ -83,6 +83,7 @@ export function EditorShell({ projectId }: EditorShellProps) {
   const moveNodeAdjacent = useEditorStore((s) => s.moveNodeAdjacent);
   const undo = useEditorStore((s) => s.undo);
   const redo = useEditorStore((s) => s.redo);
+  const activeBp = useEditorStore((s) => s.activeBreakpoint);
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
 
   const sensors = useSensors(
@@ -137,7 +138,8 @@ export function EditorShell({ projectId }: EditorShellProps) {
     );
     if (action?.kind === "reorder") {
       const pid = parentOf(nodes, data.nodeId);
-      const dir = pid && resolveFlow(nodes[pid])?.flexDirection === "column" ? "column" : "row";
+      const dir =
+        pid && resolveFlow(nodes[pid], activeBp)?.flexDirection === "column" ? "column" : "row";
       flowDropStore.set({ overId: action.refId, side: action.side, direction: dir });
     } else {
       flowDropStore.clear();
@@ -171,7 +173,7 @@ export function EditorShell({ projectId }: EditorShellProps) {
 
     // Flex (flow) child: reorder among siblings, or append into another container
     // — never absolute-reposition (frame position is meaningless in flow).
-    const parentFlow = currentParent ? resolveFlow(nodes[currentParent]) : null;
+    const parentFlow = currentParent ? resolveFlow(nodes[currentParent], activeBp) : null;
     if (parentFlow) {
       const action = resolveFlowDrag(
         nodes,

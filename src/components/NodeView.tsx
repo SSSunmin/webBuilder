@@ -90,8 +90,8 @@ export function NodeView({
 
   // A flex container flows its children: wrap them so they reflow (wrap) when the
   // container narrows, and tell each child it's in-flow (relative, no drag).
-  const flow = container ? resolveFlow(node) : null;
-  const grid = container ? resolveGrid(node) : null;
+  const flow = container ? resolveFlow(node, bp) : null;
+  const grid = container ? resolveGrid(node, bp) : null;
   const childEls = container
     ? node.children.map((cid) => (
         <NodeView key={cid} nodeId={cid} inFlow={Boolean(flow)} inGrid={Boolean(grid)} />
