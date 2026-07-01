@@ -240,6 +240,11 @@ export function createSnapModifier(
     // overlay/placeholder rect, so snapping is based on the true size.
     const rect = activeNodeRect ?? draggingNodeRect;
     if (!active || !rect) return transform;
+    // Flow (flex) children reorder via sortable, not snap-positioning. Their
+    // source stays put (opacity 0) while a clone follows the cursor, so snapping
+    // would compute a guide from the static original slot — misaligned with the
+    // clone. Skip snapping for them.
+    if ((active.data.current as { flow?: boolean } | undefined)?.flow) return transform;
     const nodeId = String(active.id).replace(/^drag:/, "");
     const draggedEl = document.querySelector(`[data-node-id="${nodeId}"]`);
     const { others, bounds } = domSnapContext(draggedEl);

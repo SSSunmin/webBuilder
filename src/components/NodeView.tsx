@@ -1,10 +1,14 @@
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
-import { useSyncExternalStore } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
+import {
+  horizontalListSortingStrategy,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { getComponentDef } from "../registry";
 import { guideStore } from "../canvas/guideStore";
-import { flowDropStore } from "../canvas/flowDropStore";
 import { domSnapContext, snapResize } from "../canvas/snap";
 import { useEditorStore } from "../store/editorStore";
 import {
@@ -35,6 +39,14 @@ export function NodeView({
   inFlow?: boolean;
   inGrid?: boolean;
 }) {
+  return inFlow ? (
+    <FlowNodeView nodeId={nodeId} />
+  ) : (
+    <StaticNodeView nodeId={nodeId} inGrid={inGrid} />
+  );
+}
+
+function useNodeModel(nodeId: string) {
   const node = useEditorStore((s) => s.document?.nodes[nodeId]);
   // Resolve a token-referencing background to its literal color, selecting the
   // computed string so the canvas re-renders live when the token value changes.
@@ -58,20 +70,6 @@ export function NodeView({
   const isRoot = nodeId === rootId;
   const container = Boolean(def?.isContainer);
 
-  // Flow children are droppable too (they're reorder targets, even leaves), and
-  // draggable (Stage B canvas reorder); absolute children keep the old rules.
-  const { setNodeRef: dropRef, isOver } = useDroppable({
-    id: `drop:${nodeId}`,
-    data: { nodeId },
-    disabled: !container && !inFlow,
-  });
-  const { setNodeRef: dragRef, listeners, attributes, transform, isDragging } =
-    useDraggable({ id: `drag:${nodeId}`, data: { nodeId }, disabled: isRoot || inGrid });
-
-  // Live insertion indicator when another flow child is being dragged over this one.
-  const drop = useSyncExternalStore(flowDropStore.subscribe, flowDropStore.get, () => null);
-  const dropHere = inFlow && drop && drop.overId === nodeId ? drop : null;
-
   if (!node || !def) return null;
 
   // Resolve layout/visibility for the active breakpoint (desktop = base frame).
@@ -83,24 +81,55 @@ export function NodeView({
   const mar = toSides(resolveMargin(node, bp), tokens);
   const hasPadding = pad.top || pad.right || pad.bottom || pad.left;
 
-  const setRefs = (el: HTMLElement | null) => {
-    dropRef(el);
-    dragRef(el);
-  };
-
   // A flex container flows its children: wrap them so they reflow (wrap) when the
-  // container narrows, and tell each child it's in-flow (relative, no drag).
+  // container narrows, and tell each child it's in-flow (relative + sortable).
   const flow = container ? resolveFlow(node, bp) : null;
   const grid = container ? resolveGrid(node, bp) : null;
+
+  // Non-desktop canvas narrows to the breakpoint's device width; height stays
+  // the resolved frame height. Desktop keeps the resolved (base) width.
+  const rootWidth =
+    bp === "desktop" ? frame.w : BREAKPOINTS.find((b) => b.id === bp)!.width;
+
+  return {
+    background,
+    boxShadow: shadowCss(node.boxShadow),
+    container,
+    def,
+    flow,
+    fontFamily: documentFontFamily(tokens),
+    frame,
+    grid,
+    hasPadding,
+    hidden,
+    isRoot,
+    mar,
+    node,
+    nodeId,
+    onlySelected,
+    pad,
+    rootWidth,
+    selectNode,
+    selected,
+    updateNodeFrame,
+  };
+}
+
+type NodeModel = NonNullable<ReturnType<typeof useNodeModel>>;
+type DndAttributes = ReturnType<typeof useDraggable>["attributes"];
+type DndListeners = ReturnType<typeof useDraggable>["listeners"];
+
+function renderChildContent({ container, flow, grid, node }: NodeModel): ReactNode {
   const childEls = container
     ? node.children.map((cid) => (
         <NodeView key={cid} nodeId={cid} inFlow={Boolean(flow)} inGrid={Boolean(grid)} />
       ))
     : undefined;
+
   // Wrap only when there are children, so an empty flex container has the same
   // structure as the code export (which skips the wrapper when empty).
-  const childContent =
-    flow && childEls && childEls.length ? (
+  if (flow && childEls && childEls.length) {
+    return (
       <div
         className="h-full w-full"
         style={{
@@ -113,9 +142,22 @@ export function NodeView({
           justifyContent: flow.justifyContent,
         }}
       >
-        {childEls}
+        <SortableContext
+          items={node.children}
+          strategy={
+            flow.flexDirection === "column"
+              ? verticalListSortingStrategy
+              : horizontalListSortingStrategy
+          }
+        >
+          {childEls}
+        </SortableContext>
       </div>
-    ) : grid && childEls && childEls.length ? (
+    );
+  }
+
+  if (grid && childEls && childEls.length) {
+    return (
       <div
         className="h-full w-full"
         style={{
@@ -130,9 +172,47 @@ export function NodeView({
       >
         {childEls}
       </div>
-    ) : (
-      childEls
     );
+  }
+
+  return childEls;
+}
+
+function NodeBox({
+  attributes,
+  childContent,
+  isDragging,
+  isOver,
+  listeners,
+  model,
+  setNodeRef,
+  style,
+}: {
+  attributes: DndAttributes;
+  childContent: ReactNode;
+  isDragging: boolean;
+  isOver: boolean;
+  listeners: DndListeners;
+  model: NodeModel;
+  setNodeRef: (el: HTMLElement | null) => void;
+  style: CSSProperties;
+}) {
+  const {
+    container,
+    def,
+    frame,
+    hasPadding,
+    hidden,
+    isRoot,
+    mar,
+    node,
+    nodeId,
+    onlySelected,
+    pad,
+    selectNode,
+    selected,
+    updateNodeFrame,
+  } = model;
 
   const startResize = (e: ReactPointerEvent) => {
     e.stopPropagation();
@@ -173,63 +253,9 @@ export function NodeView({
     window.addEventListener("pointerup", onUp);
   };
 
-  // Non-desktop canvas narrows to the breakpoint's device width; height stays
-  // the resolved frame height. Desktop keeps the resolved (base) width.
-  const rootWidth =
-    bp === "desktop" ? frame.w : BREAKPOINTS.find((b) => b.id === bp)!.width;
-
-  const boxShadow = shadowCss(node.boxShadow);
-
-  const base: CSSProperties = isRoot
-    ? {
-        position: "relative",
-        width: rootWidth,
-        height: frame.h,
-        margin: "0 auto",
-        background,
-        borderRadius: node.borderRadius,
-        boxShadow,
-        // Base font applied at the root so all nodes inherit it (mirrors export).
-        fontFamily: documentFontFamily(tokens),
-      }
-    : inGrid
-      ? {
-          position: "relative",
-          width: frame.w,
-          height: frame.h,
-          background,
-          borderRadius: node.borderRadius,
-          boxShadow,
-          zIndex: selected ? 10 : undefined,
-        }
-      : inFlow
-      ? {
-          // Flex item: flow normally, keep its fixed size, don't grow/shrink.
-          position: "relative",
-          width: frame.w,
-          height: frame.h,
-          flex: "0 0 auto",
-          background,
-          borderRadius: node.borderRadius,
-          boxShadow,
-          zIndex: selected ? 10 : undefined,
-        }
-      : {
-          position: "absolute",
-          left: frame.x,
-          top: frame.y,
-          width: frame.w,
-          height: frame.h,
-          background,
-          borderRadius: node.borderRadius,
-          boxShadow,
-          transform: CSS.Translate.toString(transform),
-          zIndex: isDragging ? 1000 : selected ? 10 : undefined,
-        };
-
   return (
     <div
-      ref={setRefs}
+      ref={setNodeRef}
       data-node-id={nodeId}
       data-pt={pad.top}
       data-pr={pad.right}
@@ -241,7 +267,7 @@ export function NodeView({
       data-ml={mar.left}
       {...attributes}
       {...listeners}
-      style={base}
+      style={style}
       onClick={(e) => {
         e.stopPropagation();
         selectNode(nodeId, e.shiftKey);
@@ -259,16 +285,6 @@ export function NodeView({
       ].join(" ")}
     >
       {def.render(node.props, childContent)}
-      {dropHere && (
-        <span
-          className="pointer-events-none absolute z-30 rounded-full bg-brand"
-          style={
-            dropHere.direction === "column"
-              ? { left: 0, right: 0, height: 3, ...(dropHere.side === "before" ? { top: -3 } : { bottom: -3 }) }
-              : { top: 0, bottom: 0, width: 3, ...(dropHere.side === "before" ? { left: -3 } : { right: -3 }) }
-          }
-        />
-      )}
       {hidden && (
         <span className="pointer-events-none absolute -top-2 right-1 z-20 rounded-chip bg-ink px-1.5 py-0.5 text-[10px] font-medium text-white">
           숨김
@@ -287,6 +303,142 @@ export function NodeView({
           title="크기 조절"
         />
       )}
+    </div>
+  );
+}
+
+function StaticNodeView({ nodeId, inGrid = false }: { nodeId: string; inGrid?: boolean }) {
+  const model = useNodeModel(nodeId);
+  const { setNodeRef: dropRef, isOver } = useDroppable({
+    id: `drop:${nodeId}`,
+    data: { nodeId },
+    disabled: !model?.container,
+  });
+  const { setNodeRef: dragRef, listeners, attributes, transform, isDragging } = useDraggable({
+    id: `drag:${nodeId}`,
+    data: { nodeId },
+    disabled: Boolean(model?.isRoot) || inGrid,
+  });
+
+  if (!model) return null;
+
+  const setRefs = (el: HTMLElement | null) => {
+    dropRef(el);
+    dragRef(el);
+  };
+
+  const base: CSSProperties = model.isRoot
+    ? {
+        position: "relative",
+        width: model.rootWidth,
+        height: model.frame.h,
+        margin: "0 auto",
+        background: model.background,
+        borderRadius: model.node.borderRadius,
+        boxShadow: model.boxShadow,
+        // Base font applied at the root so all nodes inherit it (mirrors export).
+        fontFamily: model.fontFamily,
+      }
+    : inGrid
+      ? {
+          position: "relative",
+          width: model.frame.w,
+          height: model.frame.h,
+          background: model.background,
+          borderRadius: model.node.borderRadius,
+          boxShadow: model.boxShadow,
+          zIndex: model.selected ? 10 : undefined,
+        }
+      : {
+          position: "absolute",
+          left: model.frame.x,
+          top: model.frame.y,
+          width: model.frame.w,
+          height: model.frame.h,
+          background: model.background,
+          borderRadius: model.node.borderRadius,
+          boxShadow: model.boxShadow,
+          transform: CSS.Translate.toString(transform),
+          zIndex: isDragging ? 1000 : model.selected ? 10 : undefined,
+        };
+
+  return (
+    <NodeBox
+      attributes={attributes}
+      childContent={renderChildContent(model)}
+      isDragging={isDragging}
+      isOver={isOver}
+      listeners={listeners}
+      model={model}
+      setNodeRef={setRefs}
+      style={base}
+    />
+  );
+}
+
+function FlowNodeView({ nodeId }: { nodeId: string }) {
+  const model = useNodeModel(nodeId);
+  const { attributes, isDragging, isOver, listeners, setNodeRef, transform, transition } =
+    useSortable({ id: nodeId, data: { nodeId, flow: true } });
+
+  if (!model) return null;
+
+  const base: CSSProperties = {
+    position: "relative",
+    width: model.frame.w,
+    height: model.frame.h,
+    flex: "0 0 auto",
+    background: model.background,
+    borderRadius: model.node.borderRadius,
+    boxShadow: model.boxShadow,
+    transform: CSS.Transform.toString(transform),
+    transition,
+    // why: hide the source while dragging — the DragOverlay renders the moving
+    // clone. Keeping the source static means the drop-time reorder is a clean
+    // DOM move (no repaint flash), matching a layer-tree reorder.
+    opacity: isDragging ? 0 : undefined,
+    zIndex: model.selected ? 10 : undefined,
+  };
+
+  return (
+    <NodeBox
+      attributes={attributes}
+      childContent={renderChildContent(model)}
+      isDragging={isDragging}
+      isOver={isOver}
+      listeners={listeners}
+      model={model}
+      setNodeRef={setNodeRef}
+      style={base}
+    />
+  );
+}
+
+/** Read-only visual clone of a node for the DragOverlay: the dragged flex child
+ * follows the cursor via this clone while its source element stays put (opacity
+ * 0), so dropping is a clean reorder with no repaint flash. */
+export function NodeOverlay({ nodeId }: { nodeId: string }) {
+  const node = useEditorStore((s) => s.document?.nodes[nodeId]);
+  const tokens = useEditorStore((s) => s.document?.meta.tokens);
+  const bp = useEditorStore((s) => s.activeBreakpoint);
+  if (!node) return null;
+  const def = getComponentDef(node.type);
+  if (!def) return null;
+  const frame = resolveFrame(node, bp);
+  return (
+    <div
+      className="cursor-grabbing opacity-90 outline outline-2 outline-brand"
+      style={{
+        width: frame.w,
+        height: frame.h,
+        background: resolveColor(resolveBackground(node, bp), tokens),
+        borderRadius: node.borderRadius,
+        boxShadow: shadowCss(node.boxShadow),
+        boxSizing: "border-box",
+      }}
+    >
+      {/* shell only — children aren't shown in the overlay (would need recursive dnd hooks) */}
+      {def.render(node.props, undefined)}
     </div>
   );
 }
