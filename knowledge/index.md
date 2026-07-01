@@ -14,7 +14,7 @@
 
 ### 아키텍처
 
-- [에디터 아키텍처 (5-zone)](/architecture/editor-architecture.md) — EditorShell 레이아웃, DnD 흐름, 스냅 시스템, 키보드 단축키
+- [에디터 아키텍처 (5-zone)](/architecture/editor-architecture.md) — EditorShell 레이아웃, DnD 흐름(sortable+DragOverlay flex reorder / 스코프드 collisionDetection / resolveFlowDrop), 스냅 시스템(flow 자식 스킵), NodeView 분리(FlowNodeView/StaticNodeView/NodeOverlay), 키보드 단축키
 
 ### 데이터 모델
 
