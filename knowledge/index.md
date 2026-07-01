@@ -18,7 +18,7 @@
 
 ### 데이터 모델
 
-- [PageDocument / PageNode](/data-model/page-node.md) — 저장 단위, 노드 트리, NodeFrame, Sides, DocumentTokens(색상·글꼴·간격 토큰), NodeOverride(frame 축별 병합 + padding/margin 통째 교체), EventBinding, PropSchema, 레이아웃 모드(flex/absolute/grid), LayoutMode/FlowAlign/FlowJustify, resolveFlow, resolveGrid(Stage C-1), resolvePadding/resolveMargin(Stage B1)
+- [PageDocument / PageNode](/data-model/page-node.md) — 저장 단위, 노드 트리, NodeFrame, Sides, DocumentTokens(색상·글꼴·간격 토큰), NodeOverride(frame 축별 병합 + padding/margin 통째 교체 + 레이아웃 파라미터 6개(Stage C-2)), EventBinding, PropSchema, 레이아웃 모드(flex/absolute/grid), LayoutMode/FlowAlign/FlowJustify, resolveFlow(bp?), resolveGrid(bp?), resolveLayoutField(Stage C-2), resolvePadding/resolveMargin(Stage B1). 레이아웃 모드는 per-bp 변경 불가(wrapper 구조적 이유).
 
 ### 스토어
 

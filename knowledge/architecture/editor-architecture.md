@@ -1,10 +1,10 @@
 ---
 type: Architecture
 title: 에디터 아키텍처 (5-zone)
-description: EditorShell이 제공하는 5-zone 레이아웃, DnD 흐름(절대배치·flex 자식 reorder, grid 자식은 reorder 불가), 스냅 시스템, 키보드 단축키.
-resource: src/app/EditorShell.tsx, src/routes/Editor.tsx, src/canvas/snap.ts, src/canvas/guideStore.ts, src/canvas/flowReorder.ts, src/canvas/flowDropStore.ts, src/components/NodeView.tsx
-tags: [editor, dnd, snap, architecture, flex, grid, reorder, flow]
-timestamp: 2026-06-30
+description: EditorShell이 제공하는 5-zone 레이아웃, DnD 흐름(절대배치·flex 자식 reorder, grid 자식은 reorder 불가), 스냅 시스템, 키보드 단축키. Stage C-2에서 per-bp 레이아웃 파라미터 오버라이드 추가(래퍼 클래스 .pg-N-c에 @media 규칙 emit; 레이아웃 모드는 여전히 base 고정).
+resource: src/app/EditorShell.tsx, src/routes/Editor.tsx, src/canvas/snap.ts, src/canvas/guideStore.ts, src/canvas/flowReorder.ts, src/canvas/flowDropStore.ts, src/components/NodeView.tsx, src/components/InspectorPane.tsx, src/export/code.ts
+tags: [editor, dnd, snap, architecture, flex, grid, reorder, flow, breakpoint, override, layout]
+timestamp: 2026-07-01
 ---
 
 # 에디터 아키텍처 (5-zone)
@@ -107,6 +107,31 @@ type ActiveData =
 ### export / 미리보기 자동 반영
 
 store·export 코어는 무변경. export·미리보기는 `node.children` 순서를 그대로 따르므로 `moveNodeAdjacent`로 변경된 순서가 자동 반영된다.
+
+## per-bp 레이아웃 파라미터 오버라이드 (Stage C-2)
+
+### 래퍼 클래스와 @media 규칙 분리
+
+레이아웃 컨테이너의 CSS는 두 클래스로 분리된다:
+
+| 클래스 | 역할 | override @media 대상 |
+|---|---|---|
+| `.pg-N` | 노드 박스(위치·크기·배경 등) | frame/hidden/padding/margin/background |
+| `.pg-N-c` | flex/grid 래퍼(자식 배치) | **레이아웃 파라미터(Stage C-2)** |
+
+- `pushWrapperOverrideRules(acc, cls, node, mode)` — `hasLayoutOverride(node, bp)` 가 true인 bp에 대해 `resolveFlow(node, bp)` / `resolveGrid(node, bp)`로 완전한 선언 집합을 생성해 `acc.tablet` / `acc.mobile`에 `.pg-N-c { … }` 규칙을 추가한다.
+- `flowDecls` / `gridDecls`에 `forceResets = true` 파라미터: override 블록은 `gap: 0px` · `grid-template-rows: none` 등 기본값도 명시적으로 emit하여 base 규칙이 누출되지 않도록 한다.
+- 최종 stylesheet는 base → tablet `@media` → mobile `@media` 순서로 조립(`buildCss`)되어 CSS cascade가 `resolveFlow/Grid(node, bp)`와 일치한다.
+
+### 레이아웃 모드는 per-bp 변경 불가 (불변 조건 유지)
+
+`layout` 필드(absolute/flex/grid)는 `NodeOverride`에 없다. `.pg-N-c` 래퍼의 존재 자체가 모드에 의존하는데 CSS `@media`만으로는 DOM 노드를 추가·제거할 수 없기 때문이다. `setNodeLayout`이 `layout` 키를 받으면 `activeBreakpoint`에 무관하게 항상 base 노드에 기록한다(코드 주석: `// why: layout mode controls whether the wrapper exists, so it stays base-only`).
+
+### InspectorPane / EditorShell — bp 인지 동작 (Stage C-2)
+
+- `InspectorPane`의 `LayoutControl`: 표시값은 `resolveFlow/Grid(node, activeBp)`로 해당 bp 기준으로 보여준다. override가 정의된 필드에는 "changed here" 배지를 표시하고 필드별 reset(clearOverrideField) 버튼을 제공한다. 모드 select는 비-desktop bp에서 읽기 전용.
+- `NodeView.tsx`: wrapper style이 `resolveFlow(node, bp)` / `resolveGrid(node, bp)`를 사용해 캔버스에서 활성 bp 기준으로 실시간 미리보기.
+- `EditorShell.tsx`: drop-side 판정에 `resolveFlow(parent, activeBp)`를 사용해 bp별 flexDirection을 반영.
 
 ## 스냅 시스템 (`src/canvas/snap.ts`)
 
