@@ -112,6 +112,10 @@ export interface NodeOverride {
   gap?: number;
   alignItems?: FlowAlign;
   justifyContent?: FlowJustify;
+  /** Per-bp layout MODE swap (C-3). Only "flex"↔"grid" — an absolute base has no
+   * wrapper div, and @media can't create/remove DOM, so absolute can't be swapped
+   * per breakpoint. Ignored when the base layout isn't flex/grid. */
+  layout?: "flex" | "grid";
 }
 
 /** How a container arranges its children. Absent/"absolute" (the default and the
@@ -426,8 +430,32 @@ export interface ResolvedFlow {
   justifyContent: string;
 }
 
+/**
+ * Resolve a container's layout MODE at a breakpoint, cascading desktop-first like
+ * the other resolvers. Only flex↔grid can swap per-bp: an absolute container has
+ * no wrapper div and @media can't restructure the DOM, so an absolute base stays
+ * absolute at every breakpoint (a stray override is ignored). A flex/grid base
+ * takes a tablet/mobile `layout` override, but only when it is itself flex/grid.
+ * With the default bp="desktop" this returns the base mode, so every existing
+ * base-mode caller (resolveFlow(node) / resolveGrid(node)) is unchanged.
+ */
+export function resolveLayoutMode(node: PageNode, bp: BreakpointId = "desktop"): LayoutMode {
+  const base: LayoutMode = node.layout ?? "absolute";
+  if (base !== "flex" && base !== "grid") return base;
+  let mode: LayoutMode = base;
+  if (bp === "tablet" || bp === "mobile") {
+    const t = node.overrides?.tablet?.layout;
+    if (t === "flex" || t === "grid") mode = t;
+  }
+  if (bp === "mobile") {
+    const m = node.overrides?.mobile?.layout;
+    if (m === "flex" || m === "grid") mode = m;
+  }
+  return mode;
+}
+
 export function resolveFlow(node: PageNode, bp: BreakpointId = "desktop"): ResolvedFlow | null {
-  if (node.layout !== "flex") return null;
+  if (resolveLayoutMode(node, bp) !== "flex") return null;
   return {
     flexDirection: resolveLayoutField(node, bp, "flexDirection") === "column" ? "column" : "row",
     flexWrap: "wrap",
@@ -448,7 +476,7 @@ export interface ResolvedGrid {
 }
 
 export function resolveGrid(node: PageNode, bp: BreakpointId = "desktop"): ResolvedGrid | null {
-  if (node.layout !== "grid") return null;
+  if (resolveLayoutMode(node, bp) !== "grid") return null;
   // why: counts are coerced to integers (>=1), so `repeat(N, ...)` can't inject (A03).
   const cols = Math.max(1, sanitizeSpacing(resolveLayoutField(node, bp, "gridColumns")) ?? 1);
   const rows = sanitizeSpacing(resolveLayoutField(node, bp, "gridRows"));

@@ -121,7 +121,8 @@ function hasLayoutOverride(node: PageNode, bp: Exclude<BreakpointId, "desktop">)
   const ov = node.overrides?.[bp];
   return !!(
     ov &&
-    (ov.flexDirection !== undefined ||
+    (ov.layout !== undefined ||
+      ov.flexDirection !== undefined ||
       ov.gridColumns !== undefined ||
       ov.gridRows !== undefined ||
       ov.gap !== undefined ||

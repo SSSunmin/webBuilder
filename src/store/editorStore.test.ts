@@ -1064,13 +1064,65 @@ describe("setNodeLayout", () => {
     expect(node.overrides).toBeUndefined();
   });
 
-  it("routes mode changes to base even when tablet is active", () => {
-    const rootId = store().document!.rootId;
+  it("ignores a mode change at a breakpoint on an absolute base (C-3: no wrapper to swap)", () => {
+    const rootId = store().document!.rootId; // root base is absolute (no layout field)
     store().setBreakpoint("tablet");
     store().setNodeLayout(rootId, { layout: "grid" });
     const node = store().document!.nodes[rootId];
+    // absolute has no wrapper div, so a per-bp mode swap is impossible → fully ignored.
+    expect(node.layout).toBeUndefined();
+    expect(node.overrides?.tablet).toBeUndefined();
+  });
+
+  // --- C-3: flex↔grid layout MODE swap per breakpoint ---
+  it("swaps a flex base to grid at tablet via an override, base mode unchanged", () => {
+    const rootId = store().document!.rootId;
+    store().setNodeLayout(rootId, { layout: "flex", gap: 4 });
+    store().setBreakpoint("tablet");
+    store().setNodeLayout(rootId, { layout: "grid" });
+    const node = store().document!.nodes[rootId];
+    expect(node.layout).toBe("flex"); // base mode stays flex
+    expect(node.overrides?.tablet?.layout).toBe("grid"); // swap recorded at tablet
+  });
+
+  it("routes a desktop mode change to base, not an override (regression)", () => {
+    const rootId = store().document!.rootId;
+    store().setNodeLayout(rootId, { layout: "flex" });
+    store().setNodeLayout(rootId, { layout: "grid" });
+    const node = store().document!.nodes[rootId];
     expect(node.layout).toBe("grid");
-    expect("layout" in (node.overrides?.tablet ?? {})).toBe(false);
+    expect(node.overrides).toBeUndefined();
+  });
+
+  it("clearOverrideField removes a layout swap and drops the empty bp override", () => {
+    const rootId = store().document!.rootId;
+    store().setNodeLayout(rootId, { layout: "flex" });
+    store().setBreakpoint("tablet");
+    store().setNodeLayout(rootId, { layout: "grid" });
+    store().clearOverrideField(rootId, "tablet", "layout");
+    const node = store().document!.nodes[rootId];
+    expect(node.layout).toBe("flex");
+    expect(node.overrides?.tablet).toBeUndefined();
+  });
+
+  it("resetOverride removes a layout swap along with the rest of the bp override", () => {
+    const rootId = store().document!.rootId;
+    store().setNodeLayout(rootId, { layout: "flex" });
+    store().setBreakpoint("tablet");
+    store().setNodeLayout(rootId, { layout: "grid", gridColumns: 2 });
+    store().resetOverride(rootId, "tablet");
+    const node = store().document!.nodes[rootId];
+    expect(node.overrides?.tablet).toBeUndefined();
+    expect(node.layout).toBe("flex");
+  });
+
+  it("duplicateNode copies a layout-mode swap override", () => {
+    const id = addAt(0, 0, 100, 100);
+    store().setNodeLayout(id, { layout: "flex" });
+    store().setBreakpoint("tablet");
+    store().setNodeLayout(id, { layout: "grid" });
+    const dup = store().duplicateNode(id)!;
+    expect(store().document!.nodes[dup].overrides?.tablet?.layout).toBe("grid");
   });
 
   it("clearOverrideField removes a layout override and drops the empty bp override", () => {
