@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: 데이터 모델 — PageDocument / PageNode
-description: 저장 단위인 PageDocument와 노드 트리를 구성하는 PageNode, NodeFrame, Sides, DocumentTokens, NodeOverride, EventBinding 타입 정의. v2에서 글꼴·간격 토큰 추가. v3(Stage A)에서 레이아웃 모드(flex) 추가. v4(Stage B1)에서 NodeOverride에 padding/margin 추가 및 resolvePadding/resolveMargin 신규. v5(Stage B2)에서 NodeOverride에 background 추가 및 resolveBackground 신규. v6(Stage C-1)에서 LayoutMode에 "grid" 추가, PageNode에 gridColumns/gridRows 신규, gap/alignItems/justifyContent가 flex·grid 공유 필드로 확장, ResolvedGrid 인터페이스 및 resolveGrid 신규.
+description: 저장 단위인 PageDocument와 노드 트리를 구성하는 PageNode, NodeFrame, Sides, DocumentTokens, NodeOverride, EventBinding 타입 정의. v2에서 글꼴·간격 토큰 추가. v3(Stage A)에서 레이아웃 모드(flex) 추가. v4(Stage B1)에서 NodeOverride에 padding/margin 추가 및 resolvePadding/resolveMargin 신규. v5(Stage B2)에서 NodeOverride에 background 추가 및 resolveBackground 신규. v6(Stage C-1)에서 LayoutMode에 "grid" 추가, PageNode에 gridColumns/gridRows 신규, gap/alignItems/justifyContent가 flex·grid 공유 필드로 확장, ResolvedGrid 인터페이스 및 resolveGrid 신규. v7(Stage C-2)에서 NodeOverride에 레이아웃 파라미터 6개(flexDirection/gridColumns/gridRows/gap/alignItems/justifyContent) 추가, resolveLayoutField 신규, resolveFlow/resolveGrid에 bp? 파라미터 추가.
 resource: src/types/page.ts, src/types/events.ts, src/types/component.ts
 tags: [data-model, types, page, node, design-tokens, layout, flex, grid, breakpoint, override, spacing, background]
 timestamp: 2026-06-30
@@ -99,8 +99,8 @@ interface ResolvedFlow {
   justifyContent: string;  // CSS 키워드
 }
 
-function resolveFlow(node: PageNode): ResolvedFlow | null
-// layout !== "flex"면 null(절대배치 유지)
+function resolveFlow(node: PageNode, bp: BreakpointId = "desktop"): ResolvedFlow | null
+// layout !== "flex"면 null(절대배치 유지). bp 생략 시 "desktop"(하위호환)
 ```
 
 enum → CSS 키워드 매핑표:
@@ -150,8 +150,8 @@ interface ResolvedGrid {
   justifyContent: string;        // CSS 키워드 (JUSTIFY_CSS 매핑, 폴백 "flex-start")
 }
 
-function resolveGrid(node: PageNode): ResolvedGrid | null
-// layout !== "grid"면 null
+function resolveGrid(node: PageNode, bp: BreakpointId = "desktop"): ResolvedGrid | null
+// layout !== "grid"면 null. bp 생략 시 "desktop"(하위호환)
 ```
 
 enum → CSS 매핑은 flex와 동일한 `ALIGN_CSS` / `JUSTIFY_CSS` 상수를 재사용한다. 기본 폴백만 다르다:
@@ -295,6 +295,13 @@ interface NodeOverride {
   padding?: Sides | string;   // Stage B1: 완전한 값(통째 교체, per-side 병합 아님)
   margin?: Sides | string;    // Stage B1: 완전한 값(통째 교체, per-side 병합 아님)
   background?: string;        // Stage B2: 리터럴 색상 또는 `token:<key>` 색상 토큰 참조
+  // Stage C-2: 레이아웃 파라미터 오버라이드 (6개 선택 필드)
+  flexDirection?: "row" | "column";
+  gridColumns?: number;
+  gridRows?: number;
+  gap?: number;
+  alignItems?: FlowAlign;
+  justifyContent?: FlowJustify;
 }
 ```
 
@@ -302,8 +309,10 @@ interface NodeOverride {
 - **frame vs padding/margin 병합 방식의 차이**:
   - `frame`은 `Partial<NodeFrame>` — 축별 부분 병합(예: `w`만 오버라이드하면 `x/y/h`는 base 상속).
   - `padding`·`margin`은 `Sides | string` — **완전한 값 통째 교체**. per-side 병합 없음. 오버라이드가 정의되면 base 전체를 대체한다.
+- **레이아웃 파라미터 (Stage C-2)**: 6개 필드는 필드별로 각자 cascade한다. 정의된 필드만 base 값을 교체하고, 정의되지 않은 필드는 base(desktop) 값을 상속한다.
+- **레이아웃 모드(`layout`)는 오버라이드 불가**: `layout` 필드(absolute/flex/grid)는 `NodeOverride`에 없다. `.pg-N-c` 래퍼 요소의 존재 여부가 `layout` 모드에 따라 결정되는데 CSS `@media`만으로는 DOM 구조를 바꿀 수 없으므로, 모드는 항상 base 노드(`node.layout`)에만 저장된다. `setNodeLayout`이 `layout` 키를 수신하면 activeBreakpoint에 무관하게 항상 base에 기록한다.
 
-### resolve 함수 — Stage B1/B2 신규
+### resolve 함수 — Stage B1/B2/C-2 신규
 
 ```ts
 function resolvePadding(node: PageNode, bp: BreakpointId): Sides | string | undefined
@@ -321,6 +330,33 @@ function resolveBackground(node: PageNode, bp: BreakpointId): string | undefined
   - `resolveBackground`: 반환 `string | undefined` (리터럴 색상 또는 `token:<key>`). 호출부가 `resolveColor(result, tokens)`를 적용.
 - `resolveFrame(node, bp)`: 축별 부분 병합으로 최종 frame 계산(기존 동작 유지).
 - `resolveHidden(node, bp)`: 동일 캐스케이드로 hidden 상태 계산(기존 동작 유지).
+
+### resolveLayoutField — Stage C-2 신규
+
+```ts
+function resolveLayoutField<
+  K extends "flexDirection" | "gridColumns" | "gridRows" | "gap" | "alignItems" | "justifyContent"
+>(node: PageNode, bp: BreakpointId, field: K): PageNode[K]
+```
+
+- **데스크톱-퍼스트 per-field cascade**: `resolvePadding`과 동일한 cascade 구조를 필드 단위로 적용한다.
+  - base(`node[field]`) → tablet override가 정의되면 교체 → mobile override가 정의되면 교체.
+  - tablet에만 override가 있고 mobile에 없으면 mobile은 tablet 값을 상속한다.
+- **필드별 독립 cascade**: 6개 필드 각각이 독립적으로 cascade한다. `gap`만 tablet override로 정의해도 `flexDirection`은 base를 상속한다.
+- `resolveFlow(node, bp)`와 `resolveGrid(node, bp)`가 비-desktop bp에서 내부적으로 이 함수를 사용한다.
+
+### resolveFlow / resolveGrid — bp 파라미터 추가 (Stage C-2)
+
+```ts
+function resolveFlow(node: PageNode, bp: BreakpointId = "desktop"): ResolvedFlow | null
+function resolveGrid(node: PageNode, bp: BreakpointId = "desktop"): ResolvedGrid | null
+```
+
+- `bp` 기본값이 `"desktop"`이므로 기존 호출 코드는 변경 없이 하위호환된다.
+- `bp = "desktop"` 이면 `node[field]`를 직접 읽는다(base 동작, Stage C-1 이전과 동일).
+- `bp`가 `"tablet"` 또는 `"mobile"`이면 각 enum 필드를 `resolveLayoutField(node, bp, field)`로 읽어 해당 bp의 캐스케이드 값을 반영한다.
+- `layout` 모드 체크(`node.layout !== "flex"` / `!== "grid"`)는 항상 base 노드에서만 한다(모드는 per-bp 변경 불가).
+- **신뢰경계 (A03)**: 오버라이드 값도 동일한 `sanitizeSpacing`(gap/gridColumns/gridRows) · `ALIGN_CSS` / `JUSTIFY_CSS` enum 맵(alignItems/justifyContent) · `flexDirection` 리터럴 비교(`=== "column"`)를 거친다. 알 수 없는 override 값은 enum 폴백(flex-start/stretch)으로 교체되어 CSS에 직접 주입되지 않는다.
 
 ## EventBinding — 이벤트·액션 바인딩
 

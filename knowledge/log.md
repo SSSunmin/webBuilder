@@ -2,6 +2,12 @@
 
 OKF 번들의 변경 이력. 최신 항목이 위. `/okf` 실행 시 knowledge-curator가 여기에 기록한다.
 
+## 2026-07-01 (#4 Stage C-2 — per-breakpoint 레이아웃 파라미터 오버라이드)
+
+- `data-model/page-node.md`: frontmatter description을 v7(Stage C-2)로 갱신. `NodeOverride`에 레이아웃 파라미터 6개(`flexDirection`/`gridColumns`/`gridRows`/`gap`/`alignItems`/`justifyContent`) 추가 및 모드-stays-base 규칙(wrapper 구조적 이유) 명시. 신규 `resolveLayoutField<K>(node, bp, field)` 문서화(per-field 데스크톱-퍼스트 cascade, `resolvePadding`과 동일 구조). `resolveFlow`/`resolveGrid` 시그니처에 `bp: BreakpointId = "desktop"` 파라미터 추가 반영(하위호환, 비-desktop bp에서 `resolveLayoutField` 경유). A03: override 값도 동일 sanitize/enum 폴백 경로.
+- `architecture/editor-architecture.md`: "per-bp 레이아웃 파라미터 오버라이드 (Stage C-2)" 섹션 신설 — `.pg-N`(박스) vs `.pg-N-c`(래퍼) 클래스 분리, `pushWrapperOverrideRules`가 래퍼 클래스에 @media 규칙 emit, `forceResets` 파라미터로 base 누출 방지, 레이아웃 모드 per-bp 변경 불가 불변 조건, InspectorPane/NodeView/EditorShell bp 인지 동작 정리. frontmatter description/resource/tags/timestamp 갱신.
+- `index.md`: data-model 항목 설명에 Stage C-2 내용(NodeOverride 레이아웃 6개, resolveLayoutField, bp? 파라미터, 모드 불변 조건) 반영.
+
 ## 2026-06-30 (#4 Stage C-1 — grid 컨테이너 레이아웃 모드)
 
 - `data-model/page-node.md`: frontmatter description/tags에 v6(Stage C-1) grid 반영. `LayoutMode` 유니온에 `"grid"` 추가. `PageNode` 필드 주석에 `gridColumns`/`gridRows` 신규 및 `gap`/`alignItems`/`justifyContent`의 flex·grid 공유 명시. "레이아웃 모드 (grid) — Stage C-1" 섹션 신설: 신규 필드 표, `ResolvedGrid` 인터페이스·`resolveGrid` 시그니처, gridTemplateRows 결정 로직, flex/grid 폴백 차이표, `resolveFlow`-stays-null 불변 조건, A03 신뢰경계(정수 강제·enum 폴백).

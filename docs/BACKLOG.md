@@ -12,7 +12,7 @@
 | 1 | 반응형 export 강건화 | 완료 (A·B1·B2) | frame/hidden 반응형(A) + per-bp padding/margin(B1)·background(B2) 오버라이드 |
 | 2 | 이벤트/액션 완성 | 완료 | submit·custom 액션을 실제 코드로 생성 |
 | 3 | 디자인 토큰/테마 | v2(색상·폰트·간격) 완료 | 문서 전역 색상·글꼴·간격 토큰 + 노드 참조 + export(:root/var) |
-| 4 | 레이아웃 모델(flex/grid) | A·C-1 완료 · B 구현(수동 QA 대기) | flex 컨테이너(A). B=flex 자식 캔버스 드래그 순서변경(삽입선). C-1=grid 컨테이너(완료). 반응형 레이아웃은 C-2+ |
+| 4 | 레이아웃 모델(flex/grid) | A·C-1·C-2 완료 · B 구현(수동 QA 대기) | flex 컨테이너(A). B=flex 자식 캔버스 드래그 순서변경(삽입선). C-1=grid 컨테이너. C-2=per-bp 레이아웃 오버라이드(완료) |
 
 ---
 
@@ -219,7 +219,7 @@ export 코드도 동일하게 동작한다.
 - ⚠️ **수동 QA 대기**: 캔버스 드래그 인터랙션 자체(삽입선 위치·reorder 체감·R1 collisionDetection의
   절대 드래그 간섭)는 자율 루프가 검증 불가 — 브라우저에서 시각 확인 후 머지. PR #에 명시.
 
-**Stage C — 예정**: grid 템플릿 · per-breakpoint 레이아웃 오버라이드.
+**Stage C — C-1(grid) 완료 · C-2(per-bp 레이아웃 오버라이드) [대기]**.
 
 **목표**: flow(flex) 자식을 캔버스에서 드래그해 순서를 바꾼다(삽입선 + 순서변경). 현재 flow 자식은
 드래그 비활성(순서변경은 레이어트리 ↑↓·DnD로만 가능).
@@ -372,6 +372,107 @@ gridRows?: number;     // 행 개수(선택) → grid-template-rows, 없으면 a
 **위험·불확실**: (R1 중) `resolveFlow` 확장 시 flowReorder가 grid 자식에 flex reorder 오적용 → **별도
 `resolveGrid`로 회피**(케이스 ⑤로 고정). (R2 필수) `setNodeLayout` 삭제조건이 "grid"를 지움 → 수정 +
 케이스 ⑦. (R3 낮음) grid 자식 고정 크기(셀-stretch 미지원) — 의도된 단순화, 고급 배치는 Out. 되돌리기 어려운
+변경·신규 의존성·마이그레이션 없음(전부 가역·additive).
+
+### Stage C-2 — per-breakpoint 레이아웃 오버라이드  · 상태 완료 (2026-07-01, 브랜치 `task/4-bp-layout-override`)
+
+**완료 (2026-07-01)** — 신규 의존성 0, B1/B2 per-bp 인프라 재사용:
+- 데이터 모델: `NodeOverride`에 레이아웃 파라미터 6개(`flexDirection`·`gridColumns`·`gridRows`·`gap`·
+  `alignItems`·`justifyContent`, 선택). **모드(`layout`)는 오버라이드 불가 — base 고정**(`.pg-N-c` 래퍼가
+  구조적이라 @media로 DOM 재구성 불가). 신규 `resolveLayoutField(node,bp,field)`(데스크톱-퍼스트 필드별
+  cascade, `resolvePadding` 패턴) + `resolveFlow`/`resolveGrid`에 `bp?` 인자(기본 desktop=base, 하위호환).
+- store: `setNodeLayout` 라우팅(모드→base 항상, 6 파라미터→bp≠desktop이면 `overrides[bp]`). `clearOverrideField`
+  필드 유니온에 6필드 추가. `cloneOverrides`(원시 필드 `...ov` 복제)·`resetOverride`(bp 통째 삭제) 무변경.
+- export code: `hasLayoutOverride` + `pushWrapperOverrideRules` — 레이아웃 override 있으면 `.pg-N-c` **래퍼**에
+  `resolveFlow/Grid(node,bp)` 풀 규칙을 `acc.tablet`/`mobile`로 emit(flex·grid 공통, `forceResets`로 base 누출
+  차단: `gap:0`·`grid-template-rows:none`). spec `overrideLines`에 per-bp 레이아웃 요약.
+- 캔버스(`NodeView`) 래퍼 스타일 `resolveFlow/Grid(node,bp)`(활성 bp 라이브). 인스펙터(`LayoutControl`) 파라미터
+  bp-aware(resolved-at-bp+변경됨 배지+↺), **모드 select는 비-desktop 읽기전용**. `EditorShell` drop-side
+  `resolveFlow(parent,activeBp)`.
+- **A03**: override 값도 base와 동일 `sanitizeSpacing`(정수)·`ALIGN_CSS`/`JUSTIFY_CSS`(enum)만 통과 → 인젝션 불가.
+- 리뷰(code-reviewer): mode-stays-base 불변·A03·하위호환 확인. Major 1(`grid-template-rows:none` 무효 주장) →
+  **오탐**(`none`은 유효한 초깃값=명시 행 없음, 올바른 리셋; 제안된 `auto`는 의미가 달라 오히려 버그) → 유지.
+  minor 2(래퍼-부재 회귀 테스트·주석) → 반영.
+- 검증: vitest **324 통과**, `tsc -b` 0, `eslint .` 0 errors, `vite build` 성공.
+
+**목표**: 컨테이너(base가 flex/grid)의 **레이아웃 파라미터**(`flexDirection`·`gridColumns`·`gridRows`·
+`gap`·`alignItems`·`justifyContent`)를 태블릿/모바일에서 다르게 줄 수 있게 한다. B1/B2(padding·margin·
+background)가 만든 per-bp 오버라이드 인프라(cascade resolver + `@media` emit + bp-aware 인스펙터)를
+재사용한다. **#1 Stage B의 "per-bp gap/direction 오버라이드"를 여기로 흡수.** 전 문서 100% 하위호환(additive).
+
+**현황(코드 근거)**: `NodeOverride`(`page.ts`)는 `{ frame?, hidden?, padding?, margin?, background? }`.
+B1/B2가 `resolvePadding`/`resolveMargin`/`resolveBackground(node,bp)` cascade + `code.ts:overrideDecls`(→
+`.pg-N`) + `spec.ts:overrideLines` + store bp-aware 쓰기(`setNodeSpacingValue`/`setNodeBackground`,
+`clearOverrideField`, `resetOverride`, `cloneOverrides`) + 인스펙터 bp 컨텍스트를 이미 구축. flex/grid는
+`resolveFlow`/`resolveGrid(node)`로 `.pg-N-c` **래퍼**에 emit(C-1까지 base만).
+
+**핵심 구조 제약 (계획을 좌우)**
+- 레이아웃 규칙은 자식 박스(`.pg-N`)가 아니라 **`.pg-N-c` 래퍼**에 산다 → B1/B2의 `overrideDecls`(→`.pg-N`)
+  **재사용 불가**, 래퍼 전용 per-bp emit 경로가 **새로 필요**(R1, 핵심).
+- `.pg-N-c` 래퍼 div는 **base 레이아웃이 flex/grid일 때만 DOM에 존재**. CSS `@media`는 DOM을 재구성 못 함 →
+  **absolute ↔ flex/grid 모드 전환은 per-bp 불가**(구조적).
+
+**핵심 설계 결정**
+- **D1 — 오버라이드 대상은 레이아웃 "파라미터"만, "모드(`layout`)"는 base 고정**(사용자 확정 2026-06-30).
+  per-bp 가능 = 위 6필드. `layout` 모드 자체는 base에서만. 이유 = 위 DOM 재구성 제약. flex↔grid 모드 스왑은
+  별도 후속 Stage로 분리(교차 리셋 복잡도·오염 위험 회피).
+- **D2 — resolver 확장 `resolveFlow(node, bp?)` / `resolveGrid(node, bp?)`**: optional `bp`(기본 desktop=
+  base, 하위호환). 각 레이아웃 필드를 `resolvePadding`과 동일한 데스크톱-퍼스트 필드별 cascade
+  (`mobile ?? tablet ?? base`)로 픽 후 기존 매핑. 캔버스·export·spec이 같은 함수 공유(단일 출처). `flowReorder`
+  등 base 호출부는 인자 생략 → 무변경.
+- **D3 — export 래퍼 per-bp emit**: `renderNode`에서 래퍼 존재 시 `resolveFlow/Grid(node,"tablet"|"mobile")`
+  계산, 해당 bp에 레이아웃 override가 있으면 `acc.tablet`/`acc.mobile`에 `.pg-N-c { <풀 flowDecls/gridDecls
+  at bp> }` push(항상 풀 emit → `@media`로 base를 이김, B2 `overrideBackgroundDecl` 철학). A03 동일.
+- **D4 — store `setNodeLayout` 라우팅**: `layout` 모드 변경 → 항상 base. 6 파라미터 → bp≠desktop이면
+  `overrides[bp]={...prev,[field]:value}`(B1/B2 sparse 패턴), desktop이면 base(현행). `clearOverrideField`
+  필드 유니온에 6필드 추가. `resetOverride`(bp 통째 삭제)·`cloneOverrides`(원시 필드는 `...ov`로 이미 복제)
+  **무변경**(테스트로 확인).
+- **D5 — 캔버스/인스펙터/spec**: `NodeView` 래퍼 스타일을 `resolveFlow/Grid(node, bp)`로(활성 bp 라이브
+  프리뷰). `LayoutControl` 파라미터 컨트롤 bp-aware(B1/B2처럼 resolved-at-bp + "이 화면서 변경됨" 배지 + ↺),
+  **모드 select는 비-desktop에서 base 읽기전용**("모드는 데스크탑 기준"). spec `overrideLines`에 per-bp
+  레이아웃 요약(`flowSummary/gridSummary` at bp 재사용). `childInFlow`는 base 기준 유지(모드 고정 → 일관).
+- **D6 — flowReorder drop-side**: `EditorShell`이 `resolveFlow(parent, activeBp).flexDirection`을 쓰도록
+  (override된 방향에서 before/after 정확). 소폭(R4).
+
+**데이터 모델(`src/types/page.ts`)** — 전부 선택, 기존 문서 무변경:
+```ts
+interface NodeOverride {
+  // 기존: frame?, hidden?, padding?, margin?, background?
+  flexDirection?: "row" | "column";  // C-2 (base가 flex일 때만 유효)
+  gridColumns?: number;              // C-2 (base가 grid)
+  gridRows?: number;                 // C-2 (base가 grid)
+  gap?: number;                      // C-2
+  alignItems?: FlowAlign;            // C-2
+  justifyContent?: FlowJustify;      // C-2
+  // layout(모드)은 오버라이드 불가 — base 고정
+}
+```
+
+**완료 기준(Acceptance)**: base가 flex/grid인 컨테이너에 **태블릿 gap·모바일 flexDirection(또는 grid
+columns)** 오버라이드를 주면 → 캔버스가 활성 bp에서 그 값으로 렌더, export 코드의 `@media(max-width:768px)`
+/`(375px)` 블록에 `.pg-N-c` 레이아웃 규칙이 생성, 스펙 `overrideLines`에 요약된다. **기존 base 레이아웃·
+B1/B2 오버라이드·absolute/flex/grid·flowReorder 동작은 불변**(특성화 회귀 테스트로 증명). A03: override 값도
+정수/`sanitize`/enum 화이트리스트만 통과.
+
+**vitest 케이스(~19)**
+- resolver(`page.test.ts`): ①`resolveFlow(node,bp)` cascade(태블릿→태블릿·모바일 상속, 모바일 승,
+  미정의→base) ②`resolveGrid(node,bp)` 동일 ③override 없음→base 동일(회귀) ④unknown enum override→
+  fallback(A03) ⑤필드별 독립(gap만 override, direction은 base 유지)
+- store(`editorStore.test.ts`): ⑥gap@태블릿→`overrides.tablet.gap`, base 불변 ⑦flexDirection@모바일
+  ⑧gridColumns@태블릿 ⑨desktop 편집→base(회귀) ⑩**모드 변경은 bp=tablet에서도 base** ⑪`clearOverrideField
+  (gap)` ⑫`resetOverride` 레이아웃 포함 제거 ⑬`cloneOverrides`/`duplicateNode` 레이아웃 override 복제
+- export code(`export.test.ts`): ⑭태블릿 gap→768 `.pg-N-c{…gap}` ⑮모바일 direction→375 ⑯grid columns
+  override→`.pg-N-c` template @bp ⑰**A03** override 인젝션 드롭 ⑱**회귀** base·B1/B2 emit 불변
+- export spec(`export.test.ts`): ⑲`overrideLines`에 태블릿 레이아웃 요약 + 회귀
+
+**영향 파일**: `src/types/page.ts` · `src/store/editorStore.ts` · `src/export/code.ts` · `src/export/spec.ts` ·
+`src/components/NodeView.tsx` · `src/components/InspectorPane.tsx` · `src/app/EditorShell.tsx`(drop-side
+activeBp) · 테스트 3종(`page.test.ts`·`editorStore.test.ts`·`export.test.ts`).
+
+**위험·불확실**: (R1 높음·핵심) 레이아웃은 `.pg-N-c`에 산다 → `overrideDecls`(`.pg-N`) 재사용 불가, 별도 래퍼
+emit 필수. 놓치면 override가 노드 박스에 잘못 나가 무효. (R2 결정 완료) `layout` 모드 override 제외(DOM 재구성
+불가). (R3 중) `setNodeLayout` 라우팅(mode→base, params→bp) + desktop 회귀. (R4 낮음) drop-side가 override된
+direction 반영(activeBp 전달). (R5 확인) `cloneOverrides` 원시 필드 무변경 — 테스트로 고정. 되돌리기 어려운
 변경·신규 의존성·마이그레이션 없음(전부 가역·additive).
 
 ---

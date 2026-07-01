@@ -217,6 +217,25 @@ describe("responsive media queries", () => {
     return generateCode(doc);
   }
 
+  function docWithLayoutOverride(
+    base: Partial<PageNode>,
+    overrides: PageNode["overrides"],
+  ) {
+    const { document } = buildDoc();
+    const root = document.nodes[document.rootId];
+    return {
+      ...document,
+      nodes: {
+        ...document.nodes,
+        [document.rootId]: {
+          ...root,
+          ...base,
+          overrides,
+        },
+      },
+    };
+  }
+
   it("emits a tablet media query for a node with a tablet frame override", () => {
     const code = codeWithOverrides({ tablet: { frame: { x: 10, w: 200 } } });
     expect(code).toContain("@media (max-width: 768px)");
@@ -257,6 +276,91 @@ describe("responsive media queries", () => {
     // injected markers, not the closing tag.)
     expect(code).not.toContain("<script>");
     expect(code).not.toContain("red`}");
+  });
+
+  it("emits tablet flex layout overrides on the wrapper class", () => {
+    const code = generateCode(
+      docWithLayoutOverride(
+        { layout: "flex", gap: 4 },
+        { tablet: { gap: 12 } },
+      ),
+    );
+    expect(code).toContain("@media (max-width: 768px)");
+    expect(code).toContain(".pg-0-c {");
+    expect(code).toContain("gap: 12px");
+  });
+
+  it("does not emit a breakpoint wrapper rule for spacing-only overrides", () => {
+    const code = generateCode(
+      docWithLayoutOverride(
+        { layout: "flex", gap: 4 },
+        { tablet: { padding: { top: 16, right: 16, bottom: 16, left: 16 } } },
+      ),
+    );
+    const tabletStart = code.indexOf("@media (max-width: 768px)");
+    const mobileStart = code.indexOf("@media (max-width: 375px)", tabletStart);
+    const tabletBlock = code.slice(tabletStart, mobileStart === -1 ? undefined : mobileStart);
+    expect(code.indexOf(".pg-0-c {")).toBeLessThan(tabletStart);
+    expect(tabletBlock).toContain(".pg-0 { padding: 16px; }");
+    expect(tabletBlock).not.toContain(".pg-0-c {");
+  });
+
+  it("emits mobile flexDirection overrides on the wrapper class", () => {
+    const code = generateCode(
+      docWithLayoutOverride(
+        { layout: "flex", flexDirection: "row" },
+        { mobile: { flexDirection: "column" } },
+      ),
+    );
+    expect(code).toContain("@media (max-width: 375px)");
+    expect(code).toContain(".pg-0-c { display: flex; flex-direction: column");
+  });
+
+  it("emits grid column overrides on the wrapper class", () => {
+    const code = generateCode(
+      docWithLayoutOverride(
+        { layout: "grid", gridColumns: 3 },
+        { tablet: { gridColumns: 2 } },
+      ),
+    );
+    expect(code).toContain("@media (max-width: 768px)");
+    expect(code).toContain(".pg-0-c { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))");
+  });
+
+  it("sanitizes injected layout override values in wrapper media rules", () => {
+    const unsafe = "1); } body { color: red";
+    const code = generateCode(
+      docWithLayoutOverride(
+        { layout: "grid", gridColumns: 3, gap: 8 },
+        { tablet: { gridColumns: unsafe as unknown as number, gap: unsafe as unknown as number } },
+      ),
+    );
+    expect(code).not.toContain(unsafe);
+    expect(code).toContain("grid-template-columns: repeat(1, minmax(0, 1fr))");
+    expect(code).toContain("gap: 0px");
+  });
+
+  it("keeps base layout and B1/B2 node overrides on their existing selectors", () => {
+    const code = generateCode(
+      docWithLayoutOverride(
+        { layout: "flex", gap: 4, padding: { top: 8, right: 8, bottom: 8, left: 8 } },
+        { tablet: { padding: { top: 0, right: 0, bottom: 0, left: 0 }, background: "#0000ff" } },
+      ),
+    );
+    expect(code).toContain(".pg-0-c { display: flex");
+    expect(code).toContain(".pg-0 { padding: 0; background: #0000ff; }");
+  });
+
+  it("spec lists a breakpoint layout summary", () => {
+    const spec = generateSpec(
+      docWithLayoutOverride(
+        { layout: "flex", gap: 4 },
+        { tablet: { gap: 12 } },
+      ),
+    );
+    const tabletLine = spec.split("\n").find((line) => line.includes("태블릿:"));
+    expect(tabletLine).toContain("flex");
+    expect(tabletLine).toContain("gap 12");
   });
 });
 

@@ -16,12 +16,14 @@ import {
   resolveColor,
   resolveFrame,
   resolveHidden,
+  resolveLayoutField,
   resolveMargin,
   resolvePadding,
   spacingTokenKey,
   toSides,
 } from "../types/page";
 import type {
+  BreakpointId,
   DocumentTokens,
   FlowAlign,
   FlowJustify,
@@ -167,14 +169,56 @@ const FLEX_ALIGN: { value: FlowAlign; label: string }[] = [
   { value: "stretch", label: "늘이기" },
 ];
 
+type LayoutField =
+  | "flexDirection"
+  | "gridColumns"
+  | "gridRows"
+  | "gap"
+  | "alignItems"
+  | "justifyContent";
+
+function LayoutFieldLabel({
+  label,
+  overridden,
+  onClearOverride,
+}: {
+  label: string;
+  overridden: boolean;
+  onClearOverride: () => void;
+}) {
+  return (
+    <span className="flex items-center gap-1.5 text-xs font-medium text-muted">
+      {label}
+      {overridden && (
+        <>
+          <span className="rounded-chip bg-brand-pale px-1.5 py-0.5 text-[10px] font-semibold text-brand">
+            이 화면서 변경됨
+          </span>
+          <button
+            onClick={onClearOverride}
+            title="이 브레이크포인트 오버라이드 해제"
+            aria-label="오버라이드 해제"
+            className="rounded px-1 text-muted hover:bg-line2 hover:text-ink"
+          >
+            ↺
+          </button>
+        </>
+      )}
+    </span>
+  );
+}
+
 /** Container child-layout control: 자유 배치(absolute, frame 좌표) ↔ Flex(자동 흐름).
  * When flex, exposes direction/gap/주축·교차축 정렬. Flex children flow and wrap,
  * so reorder them from the layer tree (canvas drag is disabled in flow). */
 function LayoutControl({
   node,
+  bp,
   onChange,
+  onClearOverride,
 }: {
   node: PageNode;
+  bp: BreakpointId;
   onChange: (
     partial: Partial<
       Pick<
@@ -189,10 +233,22 @@ function LayoutControl({
       >
     >,
   ) => void;
+  onClearOverride: (field: LayoutField) => void;
 }) {
   const flex = node.layout === "flex";
   const grid = node.layout === "grid";
   const layoutValue = flex || grid ? node.layout : "absolute";
+  const isCustomBp = bp !== "desktop";
+  const overridden = (field: LayoutField) =>
+    isCustomBp && node.overrides?.[bp]?.[field] !== undefined;
+  const clear = (field: LayoutField) => () => onClearOverride(field);
+  const flexDirection =
+    resolveLayoutField(node, bp, "flexDirection") === "column" ? "column" : "row";
+  const gridColumns = Math.max(1, Math.round(resolveLayoutField(node, bp, "gridColumns") ?? 1));
+  const gridRows = Math.max(0, Math.round(resolveLayoutField(node, bp, "gridRows") ?? 0));
+  const gap = Math.max(0, Math.round(resolveLayoutField(node, bp, "gap") ?? 0));
+  const justifyContent = resolveLayoutField(node, bp, "justifyContent") ?? "start";
+  const alignItems = resolveLayoutField(node, bp, "alignItems") ?? (grid ? "stretch" : "start");
   return (
     <div className="flex flex-col gap-2">
       <label className="flex flex-col gap-1">
@@ -200,54 +256,68 @@ function LayoutControl({
         <select
           className={inputCls}
           value={layoutValue}
+          disabled={isCustomBp}
           onChange={(e) => onChange({ layout: e.target.value as PageNode["layout"] })}
         >
           <option value="grid">Grid (자동 배치)</option>
           <option value="absolute">자유 배치 (좌표)</option>
           <option value="flex">Flex (자동 흐름)</option>
         </select>
+        {isCustomBp && <span className="text-[11px] text-muted">모드는 데스크탑 기준</span>}
       </label>
       {(flex || grid) && (
         <div className="flex flex-col gap-2 rounded-button border border-line2 p-2">
           {flex && (
             <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted">방향</span>
-            <select
-              className={inputCls}
-              value={node.flexDirection === "column" ? "column" : "row"}
-              onChange={(e) =>
-                onChange({ flexDirection: e.target.value === "column" ? "column" : "row" })
-              }
-            >
-              {FLEX_DIRS.map((d) => (
-                <option key={d.value} value={d.value}>
-                  {d.label}
-                </option>
-              ))}
-            </select>
+              <LayoutFieldLabel
+                label="방향"
+                overridden={overridden("flexDirection")}
+                onClearOverride={clear("flexDirection")}
+              />
+              <select
+                className={inputCls}
+                value={flexDirection}
+                onChange={(e) =>
+                  onChange({ flexDirection: e.target.value === "column" ? "column" : "row" })
+                }
+              >
+                {FLEX_DIRS.map((d) => (
+                  <option key={d.value} value={d.value}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
             </label>
           )}
           {grid && (
             <>
               <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-muted">열 개수</span>
+                <LayoutFieldLabel
+                  label="열 개수"
+                  overridden={overridden("gridColumns")}
+                  onClearOverride={clear("gridColumns")}
+                />
                 <input
                   type="number"
                   min={1}
                   className={inputCls}
-                  value={Math.max(1, Math.round(node.gridColumns ?? 1))}
+                  value={gridColumns}
                   onChange={(e) =>
                     onChange({ gridColumns: e.target.value === "" ? 1 : Number(e.target.value) })
                   }
                 />
               </label>
               <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-muted">행 개수</span>
+                <LayoutFieldLabel
+                  label="행 개수"
+                  overridden={overridden("gridRows")}
+                  onClearOverride={clear("gridRows")}
+                />
                 <input
                   type="number"
                   min={0}
                   className={inputCls}
-                  value={Math.max(0, Math.round(node.gridRows ?? 0))}
+                  value={gridRows}
                   onChange={(e) =>
                     onChange({ gridRows: e.target.value === "" ? 0 : Number(e.target.value) })
                   }
@@ -256,20 +326,28 @@ function LayoutControl({
             </>
           )}
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted">간격 (gap, px)</span>
+            <LayoutFieldLabel
+              label="간격 (gap, px)"
+              overridden={overridden("gap")}
+              onClearOverride={clear("gap")}
+            />
             <input
               type="number"
               min={0}
               className={inputCls}
-              value={Math.max(0, Math.round(node.gap ?? 0))}
+              value={gap}
               onChange={(e) => onChange({ gap: e.target.value === "" ? 0 : Number(e.target.value) })}
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted">주축 정렬</span>
+            <LayoutFieldLabel
+              label="주축 정렬"
+              overridden={overridden("justifyContent")}
+              onClearOverride={clear("justifyContent")}
+            />
             <select
               className={inputCls}
-              value={node.justifyContent ?? "start"}
+              value={justifyContent}
               onChange={(e) => onChange({ justifyContent: e.target.value as FlowJustify })}
             >
               {FLEX_JUSTIFY.map((j) => (
@@ -280,10 +358,14 @@ function LayoutControl({
             </select>
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted">교차축 정렬</span>
+            <LayoutFieldLabel
+              label="교차축 정렬"
+              overridden={overridden("alignItems")}
+              onClearOverride={clear("alignItems")}
+            />
             <select
               className={inputCls}
-              value={node.alignItems ?? (grid ? "stretch" : "start")}
+              value={alignItems}
               onChange={(e) => onChange({ alignItems: e.target.value as FlowAlign })}
             >
               {FLEX_ALIGN.map((a) => (
@@ -1069,7 +1151,9 @@ export function InspectorPane() {
               {def.isContainer && (
                 <LayoutControl
                   node={node}
+                  bp={bp}
                   onChange={(partial) => setNodeLayout(selectedId, partial)}
+                  onClearOverride={(field) => clearOverrideField(selectedId, bp, field)}
                 />
               )}
               {def.isContainer && (
